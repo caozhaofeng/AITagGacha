@@ -1,0 +1,489 @@
+{
+    "version": "1.0",
+    "metadata": {
+      "name": "AI绘画基础提示词 (示例)",
+      "description": "供AI绘画参考的基础提示词"
+    },
+    "groups": [
+      {
+        "name": "风格与画质",
+        "categories": [
+          {
+            "name": "艺术风格",
+            "tags": [
+              { "name": "watercolor", "subtitles": ["艺术效果", "绘画"], "keyword": "水彩画" },
+              { "name": "oil painting", "subtitles": ["艺术效果", "绘画"], "keyword": "油画" },
+              { "name": "anime style", "subtitles": ["卡通", "二次元"], "keyword": "动漫风格" },
+              { "name": "pixel art", "subtitles": ["复古", "游戏"], "keyword": "像素艺术" },
+              { "name": "sketch", "subtitles": ["手绘", "草图"], "keyword": "素描" },
+              { "name": "illustration", "subtitles": ["绘本", "平面"], "keyword": "插画" },
+              { "name": "cyberpunk", "subtitles": ["科幻", "未来"], "keyword": "赛博朋克" },
+              { "name": "steampunk", "subtitles": ["复古科幻", "机械"], "keyword": "蒸汽朋克" },
+              { "name": "concept art", "subtitles": ["设定稿", "设计"], "keyword": "概念艺术" },
+              { "name": "low poly", "subtitles": ["几何", "3D"], "keyword": "低聚艺术" }
+            ]
+          },
+          {
+            "name": "画面质量",
+            "tags": [
+              { "name": "masterpiece", "subtitles": ["最高质量", "艺术品"], "keyword": "杰作" },
+              { "name": "best quality", "subtitles": ["优质", "推荐"], "keyword": "最佳质量" },
+              { "name": "high resolution", "subtitles": ["清晰", "大图"], "keyword": "高分辨率" },
+              { "name": "ultra-detailed", "subtitles": ["细节丰富", "复杂"], "keyword": "超精细" },
+              { "name": "detailed", "subtitles": ["刻画深入", "写实"], "keyword": "精细细节" },
+              { "name": "hd wallpaper", "subtitles": ["桌面背景", "清晰"], "keyword": "高清壁纸" },
+              { "name": "official art", "subtitles": ["原画", "设定"], "keyword": "官方艺术" },
+              { "name": "8k resolution", "subtitles": ["极高清晰度", "超高清"], "keyword": "8K分辨率" },
+              { "name": "sharp focus", "subtitles": ["清晰对焦", "突出主体"], "keyword": "锐利焦点" },
+              { "name": "photorealistic", "subtitles": ["写实", "模拟照片"], "keyword": "照片级真实感" }
+            ]
+          },
+          {
+            "name": "渲染效果",
+            "tags": [
+              { "name": "cinematic lighting", "subtitles": ["氛围", "光影"], "keyword": "电影光照" },
+              { "name": "volumetric lighting", "subtitles": ["丁达尔效应", "光束"], "keyword": "体积光" },
+              { "name": "depth of field", "subtitles": ["背景模糊", "突出主体"], "keyword": "景深" },
+              { "name": "ray tracing", "subtitles": ["真实光影", "反射"], "keyword": "光线追踪" },
+              { "name": "motion blur", "subtitles": ["运动效果", "速度感"], "keyword": "动态模糊" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "人物与特征",
+        "categories": [
+          {
+            "name": "人物类型",
+            "tags": [
+              { "name": "1girl", "subtitles": ["单个女性", "主要角色"], "keyword": "1个女孩" },
+              { "name": "1boy", "subtitles": ["单个男性", "主要角色"], "keyword": "1个男孩" },
+              { "name": "multiple girls", "subtitles": ["女性群体", "多人"], "keyword": "多个女孩" },
+              { "name": "elf", "subtitles": ["奇幻种族", "长耳"], "keyword": "精灵" },
+              { "name": "robot", "subtitles": ["机械", "人造人"], "keyword": "机器人" },
+              { "name": "vampire", "subtitles": ["奇幻种族", "不死"], "keyword": "吸血鬼" },
+              { "name": "kemonomimi", "subtitles": ["动物耳朵", "萌系"], "keyword": "兽耳娘" },
+              { "name": "demon", "subtitles": ["魔幻", "角"], "keyword": "恶魔" },
+              { "name": "angel", "subtitles": ["神圣", "翅膀"], "keyword": "天使" },
+              { "name": "astronaut", "subtitles": ["太空服", "科幻"], "keyword": "宇航员" }
+            ]
+          },
+          {
+            "name": "面部特征",
+            "tags": [
+              { "name": "smile", "subtitles": ["表情", "开心"], "keyword": "微笑" },
+              { "name": "closed eyes", "subtitles": ["表情", "休息"], "keyword": "闭眼" },
+              { "name": "blue eyes", "subtitles": ["瞳色", "常见"], "keyword": "蓝眼睛" },
+              { "name": "red eyes", "subtitles": ["瞳色", "特殊"], "keyword": "红眼睛" },
+              { "name": "long hair", "subtitles": ["发型", "女性常见"], "keyword": "长发" },
+              { "name": "short hair", "subtitles": ["发型", "男性常见"], "keyword": "短发" },
+              { "name": "twintails", "subtitles": ["发型", "萌系"], "keyword": "双马尾" },
+              { "name": "blush", "subtitles": ["表情", "害羞"], "keyword": "红晕" },
+              { "name": "pointy ears", "subtitles": ["精灵特征", "奇幻"], "keyword": "尖耳朵" },
+              { "name": "bangs", "subtitles": ["发型", "前额"], "keyword": "刘海" }
+            ]
+          },
+          {
+            "name": "服装配饰",
+            "tags": [
+              { "name": "dress", "subtitles": ["女性服装", "裙子"], "keyword": "连衣裙" },
+              { "name": "school uniform", "subtitles": ["学生装", "制服"], "keyword": "校服" },
+              { "name": "sailor suit", "subtitles": ["日式校服", "制服"], "keyword": "水手服" },
+              { "name": "glasses", "subtitles": ["配饰", "视力"], "keyword": "眼镜" },
+              { "name": "hat", "subtitles": ["配饰", "头部"], "keyword": "帽子" },
+              { "name": "skirt", "subtitles": ["女性服装", "下装"], "keyword": "短裙" },
+              { "name": "thighhighs", "subtitles": ["袜子", "腿部"], "keyword": "过膝袜" },
+              { "name": "necklace", "subtitles": ["饰品", "颈部"], "keyword": "项链" },
+              { "name": "gloves", "subtitles": ["配饰", "手部"], "keyword": "手套" },
+              { "name": "kimono", "subtitles": ["日式服装", "传统"], "keyword": "和服" },
+              { "name": "armor", "subtitles": ["防护", "战斗"], "keyword": "盔甲" },
+              { "name": "hood", "subtitles": ["头部服装", "神秘"], "keyword": "兜帽" },
+              { "name": "necktie", "subtitles": ["正装", "颈部饰品"], "keyword": "领带" },
+              { "name": "ribbon", "subtitles": ["装饰", "发饰"], "keyword": "丝带" },
+              { "name": "mask", "subtitles": ["遮挡面部", "神秘"], "keyword": "面具" }
+            ]
+          },
+          {
+            "name": "身体姿态",
+            "tags": [
+              { "name": "standing", "subtitles": ["姿势", "基本"], "keyword": "站立" },
+              { "name": "sitting", "subtitles": ["姿势", "休息"], "keyword": "坐着" },
+              { "name": "lying", "subtitles": ["姿势", "睡眠"], "keyword": "躺着" },
+              { "name": "full body", "subtitles": ["构图", "完整人物"], "keyword": "全身像" },
+              { "name": "upper body", "subtitles": ["构图", "肖像"], "keyword": "上半身" },
+              { "name": "looking at viewer", "subtitles": ["视角", "互动"], "keyword": "看向观众" },
+              { "name": "from behind", "subtitles": ["视角", "背影"], "keyword": "背对" },
+              { "name": "profile", "subtitles": ["视角", "轮廓"], "keyword": "侧面视角" },
+              { "name": "arm up", "subtitles": ["动作", "手臂"], "keyword": "举手" },
+              { "name": "arms crossed", "subtitles": ["动作", "姿态"], "keyword": "抱臂" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "场景与物品",
+        "categories": [
+          {
+            "name": "自然环境",
+            "tags": [
+              { "name": "outdoors", "subtitles": ["环境", "外部"], "keyword": "户外" },
+              { "name": "forest", "subtitles": ["自然", "树木"], "keyword": "森林" },
+              { "name": "beach", "subtitles": ["自然", "海边"], "keyword": "海滩" },
+              { "name": "snowy mountains", "subtitles": ["自然", "冬季"], "keyword": "雪山" },
+              { "name": "sky", "subtitles": ["自然", "上方"], "keyword": "天空" },
+              { "name": "night", "subtitles": ["时间", "黑暗"], "keyword": "夜晚" },
+              { "name": "underwater", "subtitles": ["环境", "水体"], "keyword": "水下" },
+              { "name": "flower field", "subtitles": ["自然", "植物"], "keyword": "花田" },
+              { "name": "desert", "subtitles": ["自然", "干旱"], "keyword": "沙漠" },
+              { "name": "cityscape", "subtitles": ["建筑", "都市"], "keyword": "城市景观" }
+            ]
+          },
+          {
+            "name": "室内场景",
+            "tags": [
+              { "name": "indoors", "subtitles": ["环境", "内部"], "keyword": "室内" },
+              { "name": "bedroom", "subtitles": ["房间", "休息"], "keyword": "卧室" },
+              { "name": "cafe", "subtitles": ["场所", "餐饮"], "keyword": "咖啡馆" },
+              { "name": "library", "subtitles": ["场所", "阅读"], "keyword": "图书馆" },
+              { "name": "classroom", "subtitles": ["场所", "学习"], "keyword": "教室" },
+              { "name": "office", "subtitles": ["场所", "工作"], "keyword": "办公室" },
+              { "name": "kitchen", "subtitles": ["房间", "烹饪"], "keyword": "厨房" },
+              { "name": "laboratory", "subtitles": ["场所", "科研"], "keyword": "实验室" },
+              { "name": "shop", "subtitles": ["场所", "购物"], "keyword": "商店" },
+              { "name": "stage", "subtitles": ["场所", "表演"], "keyword": "舞台" }
+            ]
+          },
+          {
+            "name": "常见物品",
+            "tags": [
+              { "name": "book", "subtitles": ["物品", "阅读"], "keyword": "书" },
+              { "name": "chair", "subtitles": ["家具", "坐具"], "keyword": "椅子" },
+              { "name": "table", "subtitles": ["家具", "平面"], "keyword": "桌子" },
+              { "name": "flower", "subtitles": ["植物", "装饰"], "keyword": "花" },
+              { "name": "sword", "subtitles": ["武器", "冷兵器"], "keyword": "剑" },
+              { "name": "gun", "subtitles": ["武器", "热兵器"], "keyword": "枪" },
+              { "name": "food", "subtitles": ["物品", "餐饮"], "keyword": "食物" },
+              { "name": "drink", "subtitles": ["物品", "餐饮"], "keyword": "饮料" },
+              { "name": "computer", "subtitles": ["电子产品", "设备"], "keyword": "电脑" },
+              { "name": "smartphone", "subtitles": ["电子产品", "通讯"], "keyword": "手机" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "人物扩展",
+        "categories": [
+          {
+            "name": "对象",
+            "tags": [
+              { "name": "2girls", "subtitles": ["双人", "女性"], "keyword": "2女孩" },
+              { "name": "2boys", "subtitles": ["双人", "男性"], "keyword": "2男孩" },
+              { "name": "3girls", "subtitles": ["三人", "女性"], "keyword": "3女孩" },
+              { "name": "3boys", "subtitles": ["三人", "男性"], "keyword": "3男孩" },
+              { "name": "solo", "subtitles": ["单人", "主体"], "keyword": "单人" },
+              { "name": "multiple_girls", "subtitles": ["多人", "女性"], "keyword": "多个女孩" },
+              { "name": "little_girl", "subtitles": ["儿童", "女性"], "keyword": "小女孩" },
+              { "name": "little_boy", "subtitles": ["儿童", "男性"], "keyword": "小男孩" },
+              { "name": "shota", "subtitles": ["正太", "少年"], "keyword": "正太" },
+              { "name": "loli", "subtitles": ["萝莉", "少女"], "keyword": "萝莉" },
+              { "name": "kawaii", "subtitles": ["可爱", "风格"], "keyword": "可爱" },
+              { "name": "mesugaki", "subtitles": ["雌小鬼", "调皮"], "keyword": "雌小鬼" },
+              { "name": "bishoujo", "subtitles": ["美少女", "动漫"], "keyword": "美少女" },
+              { "name": "bishounen", "subtitles": ["美少年", "动漫"], "keyword": "美少年" },
+              { "name": "twin_girls", "subtitles": ["双胞胎", "女性"], "keyword": "双胞胎女孩" },
+              { "name": "twin_boys", "subtitles": ["双胞胎", "男性"], "keyword": "双胞胎男孩" },
+              { "name": "family", "subtitles": ["家庭", "多人"], "keyword": "家庭" },
+              { "name": "group", "subtitles": ["群体", "多人"], "keyword": "群体" },
+              { "name": "child", "subtitles": ["儿童", "中性"], "keyword": "儿童" },
+              { "name": "baby", "subtitles": ["婴儿", "幼儿"], "keyword": "婴儿" }
+            ]
+          },
+          {
+            "name": "身份与职业",
+            "tags": [
+              { "name": "student", "subtitles": ["学生", "校园"], "keyword": "学生" },
+              { "name": "teacher", "subtitles": ["教师", "校园"], "keyword": "老师" },
+              { "name": "doctor", "subtitles": ["医生", "职业"], "keyword": "医生" },
+              { "name": "nurse", "subtitles": ["护士", "职业"], "keyword": "护士" },
+              { "name": "police", "subtitles": ["警察", "制服"], "keyword": "警察" },
+              { "name": "soldier", "subtitles": ["士兵", "军装"], "keyword": "士兵" },
+              { "name": "maid", "subtitles": ["女仆", "服务"], "keyword": "女仆" },
+              { "name": "waiter", "subtitles": ["服务员", "餐饮"], "keyword": "服务员" },
+              { "name": "chef", "subtitles": ["厨师", "餐饮"], "keyword": "厨师" },
+              { "name": "firefighter", "subtitles": ["消防员", "职业"], "keyword": "消防员" },
+              { "name": "pilot", "subtitles": ["飞行员", "职业"], "keyword": "飞行员" },
+              { "name": "astronaut", "subtitles": ["宇航员", "太空"], "keyword": "宇航员" },
+              { "name": "artist", "subtitles": ["艺术家", "创作"], "keyword": "艺术家" },
+              { "name": "musician", "subtitles": ["音乐家", "表演"], "keyword": "音乐家" },
+              { "name": "dancer", "subtitles": ["舞者", "表演"], "keyword": "舞者" },
+              { "name": "actor", "subtitles": ["演员", "表演"], "keyword": "演员" },
+              { "name": "writer", "subtitles": ["作家", "文学"], "keyword": "作家" },
+              { "name": "scientist", "subtitles": ["科学家", "研究"], "keyword": "科学家" },
+              { "name": "engineer", "subtitles": ["工程师", "技术"], "keyword": "工程师" },
+              { "name": "programmer", "subtitles": ["程序员", "技术"], "keyword": "程序员" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "场景扩展",
+        "categories": [
+          {
+            "name": "自然环境",
+            "tags": [
+              { "name": "mountain", "subtitles": ["自然", "山地"], "keyword": "山" },
+              { "name": "river", "subtitles": ["自然", "水域"], "keyword": "河流" },
+              { "name": "island", "subtitles": ["自然", "岛屿"], "keyword": "岛屿" },
+              { "name": "valley", "subtitles": ["自然", "山谷"], "keyword": "山谷" },
+              { "name": "cave", "subtitles": ["自然", "洞穴"], "keyword": "洞穴" },
+              { "name": "waterfall", "subtitles": ["自然", "瀑布"], "keyword": "瀑布" },
+              { "name": "lake", "subtitles": ["自然", "湖泊"], "keyword": "湖泊" },
+              { "name": "meadow", "subtitles": ["自然", "草地"], "keyword": "草地" },
+              { "name": "cliff", "subtitles": ["自然", "悬崖"], "keyword": "悬崖" },
+              { "name": "volcano", "subtitles": ["自然", "火山"], "keyword": "火山" }
+            ]
+          },
+          {
+            "name": "城市与建筑",
+            "tags": [
+              { "name": "city", "subtitles": ["城市", "建筑"], "keyword": "城市" },
+              { "name": "street", "subtitles": ["街道", "都市"], "keyword": "街道" },
+              { "name": "building", "subtitles": ["建筑", "高楼"], "keyword": "建筑物" },
+              { "name": "bridge", "subtitles": ["桥梁", "交通"], "keyword": "桥" },
+              { "name": "park", "subtitles": ["公园", "休闲"], "keyword": "公园" },
+              { "name": "school", "subtitles": ["学校", "教育"], "keyword": "学校" },
+              { "name": "hospital", "subtitles": ["医院", "医疗"], "keyword": "医院" },
+              { "name": "mall", "subtitles": ["商场", "购物"], "keyword": "商场" },
+              { "name": "temple", "subtitles": ["寺庙", "宗教"], "keyword": "寺庙" },
+              { "name": "castle", "subtitles": ["城堡", "历史"], "keyword": "城堡" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "物品扩展",
+        "categories": [
+          {
+            "name": "日常用品",
+            "tags": [
+              { "name": "pen", "subtitles": ["书写", "文具"], "keyword": "钢笔" },
+              { "name": "cup", "subtitles": ["饮品", "餐具"], "keyword": "杯子" },
+              { "name": "phone", "subtitles": ["通讯", "电子"], "keyword": "手机" },
+              { "name": "bag", "subtitles": ["包", "随身物品"], "keyword": "包" },
+              { "name": "watch", "subtitles": ["手表", "配饰"], "keyword": "手表" },
+              { "name": "umbrella", "subtitles": ["雨具", "日常"], "keyword": "雨伞" },
+              { "name": "bottle", "subtitles": ["水瓶", "饮品"], "keyword": "水瓶" },
+              { "name": "key", "subtitles": ["钥匙", "日常"], "keyword": "钥匙" },
+              { "name": "wallet", "subtitles": ["钱包", "随身物品"], "keyword": "钱包" },
+              { "name": "camera", "subtitles": ["相机", "电子"], "keyword": "相机" }
+            ]
+          },
+          {
+            "name": "武器与装备",
+            "tags": [
+              { "name": "shield", "subtitles": ["防具", "装备"], "keyword": "盾牌" },
+              { "name": "helmet", "subtitles": ["头盔", "防护"], "keyword": "头盔" },
+              { "name": "armor", "subtitles": ["护甲", "防护"], "keyword": "护甲" },
+              { "name": "bow", "subtitles": ["弓", "远程武器"], "keyword": "弓" },
+              { "name": "arrow", "subtitles": ["箭", "远程武器"], "keyword": "箭" },
+              { "name": "dagger", "subtitles": ["匕首", "近战武器"], "keyword": "匕首" },
+              { "name": "axe", "subtitles": ["斧头", "工具"], "keyword": "斧头" },
+              { "name": "staff", "subtitles": ["法杖", "魔法"], "keyword": "法杖" },
+              { "name": "wand", "subtitles": ["魔杖", "魔法"], "keyword": "魔杖" },
+              { "name": "spear", "subtitles": ["长矛", "武器"], "keyword": "长矛" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "风格与艺术",
+        "categories": [
+          {
+            "name": "艺术风格扩展",
+            "tags": [
+              { "name": "pop_art", "subtitles": ["流行艺术", "现代"], "keyword": "波普艺术" },
+              { "name": "minimalism", "subtitles": ["极简", "现代"], "keyword": "极简主义" },
+              { "name": "baroque", "subtitles": ["巴洛克", "古典"], "keyword": "巴洛克" },
+              { "name": "gothic", "subtitles": ["哥特", "黑暗"], "keyword": "哥特风" },
+              { "name": "surrealism", "subtitles": ["超现实", "艺术"], "keyword": "超现实主义" },
+              { "name": "impressionism", "subtitles": ["印象派", "艺术"], "keyword": "印象派" },
+              { "name": "cubism", "subtitles": ["立体主义", "艺术"], "keyword": "立体主义" },
+              { "name": "futurism", "subtitles": ["未来主义", "艺术"], "keyword": "未来主义" },
+              { "name": "expressionism", "subtitles": ["表现主义", "艺术"], "keyword": "表现主义" },
+              { "name": "realism", "subtitles": ["写实", "艺术"], "keyword": "写实主义" }
+            ]
+          },
+          {
+            "name": "色彩与氛围",
+            "tags": [
+              { "name": "monochrome", "subtitles": ["单色", "色彩"], "keyword": "单色" },
+              { "name": "vivid", "subtitles": ["鲜艳", "色彩"], "keyword": "鲜艳" },
+              { "name": "pastel", "subtitles": ["粉彩", "柔和"], "keyword": "粉彩" },
+              { "name": "dark", "subtitles": ["黑暗", "氛围"], "keyword": "黑暗" },
+              { "name": "bright", "subtitles": ["明亮", "氛围"], "keyword": "明亮" },
+              { "name": "warm", "subtitles": ["温暖", "色调"], "keyword": "温暖" },
+              { "name": "cold", "subtitles": ["冷色", "色调"], "keyword": "冷色" },
+              { "name": "neon", "subtitles": ["霓虹", "现代"], "keyword": "霓虹" },
+              { "name": "vintage", "subtitles": ["复古", "氛围"], "keyword": "复古" },
+              { "name": "fantasy", "subtitles": ["幻想", "氛围"], "keyword": "幻想" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "人物与特征扩展",
+        "categories": [
+          {
+            "name": "表情与情绪",
+            "tags": [
+              { "name": "smile", "subtitles": ["表情", "开心"], "keyword": "微笑" },
+              { "name": "crying", "subtitles": ["表情", "流泪"], "keyword": "哭泣" },
+              { "name": "angry", "subtitles": ["表情", "愤怒"], "keyword": "生气" },
+              { "name": "shy", "subtitles": ["表情", "害羞"], "keyword": "害羞" },
+              { "name": "blush", "subtitles": ["表情", "脸红"], "keyword": "脸红" },
+              { "name": "surprised", "subtitles": ["表情", "惊讶"], "keyword": "惊讶" },
+              { "name": "sleepy", "subtitles": ["表情", "困倦"], "keyword": "困" },
+              { "name": "serious", "subtitles": ["表情", "严肃"], "keyword": "严肃" },
+              { "name": "confused", "subtitles": ["表情", "困惑"], "keyword": "困惑" },
+              { "name": "winking", "subtitles": ["表情", "眨眼"], "keyword": "眨眼" }
+            ]
+          },
+          {
+            "name": "动作与姿态",
+            "tags": [
+              { "name": "standing", "subtitles": ["姿势", "站立"], "keyword": "站立" },
+              { "name": "sitting", "subtitles": ["姿势", "坐着"], "keyword": "坐着" },
+              { "name": "lying", "subtitles": ["姿势", "躺着"], "keyword": "躺着" },
+              { "name": "jumping", "subtitles": ["动作", "跳跃"], "keyword": "跳跃" },
+              { "name": "running", "subtitles": ["动作", "奔跑"], "keyword": "奔跑" },
+              { "name": "walking", "subtitles": ["动作", "行走"], "keyword": "行走" },
+              { "name": "dancing", "subtitles": ["动作", "舞蹈"], "keyword": "跳舞" },
+              { "name": "swimming", "subtitles": ["动作", "游泳"], "keyword": "游泳" },
+              { "name": "flying", "subtitles": ["动作", "飞行"], "keyword": "飞行" },
+              { "name": "posing", "subtitles": ["姿势", "摆拍"], "keyword": "摆姿势" }
+            ]
+          },
+          {
+            "name": "服饰与配件",
+            "tags": [
+              { "name": "dress", "subtitles": ["服装", "连衣裙"], "keyword": "连衣裙" },
+              { "name": "suit", "subtitles": ["服装", "西装"], "keyword": "西装" },
+              { "name": "uniform", "subtitles": ["服装", "制服"], "keyword": "制服" },
+              { "name": "kimono", "subtitles": ["服装", "和服"], "keyword": "和服" },
+              { "name": "cheongsam", "subtitles": ["服装", "旗袍"], "keyword": "旗袍" },
+              { "name": "swimsuit", "subtitles": ["服装", "泳装"], "keyword": "泳装" },
+              { "name": "coat", "subtitles": ["服装", "外套"], "keyword": "外套" },
+              { "name": "scarf", "subtitles": ["配饰", "围巾"], "keyword": "围巾" },
+              { "name": "gloves", "subtitles": ["配饰", "手套"], "keyword": "手套" },
+              { "name": "boots", "subtitles": ["鞋类", "靴子"], "keyword": "靴子" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "场景与环境扩展",
+        "categories": [
+          {
+            "name": "天气与时间",
+            "tags": [
+              { "name": "sunny", "subtitles": ["天气", "晴天"], "keyword": "晴天" },
+              { "name": "cloudy", "subtitles": ["天气", "多云"], "keyword": "多云" },
+              { "name": "rainy", "subtitles": ["天气", "雨天"], "keyword": "雨天" },
+              { "name": "snowy", "subtitles": ["天气", "雪天"], "keyword": "雪天" },
+              { "name": "foggy", "subtitles": ["天气", "雾"], "keyword": "雾" },
+              { "name": "stormy", "subtitles": ["天气", "暴风雨"], "keyword": "暴风雨" },
+              { "name": "night", "subtitles": ["时间", "夜晚"], "keyword": "夜晚" },
+              { "name": "dawn", "subtitles": ["时间", "黎明"], "keyword": "黎明" },
+              { "name": "dusk", "subtitles": ["时间", "黄昏"], "keyword": "黄昏" },
+              { "name": "midday", "subtitles": ["时间", "中午"], "keyword": "中午" }
+            ]
+          },
+          {
+            "name": "特殊场景",
+            "tags": [
+              { "name": "festival", "subtitles": ["节日", "庆典"], "keyword": "节日" },
+              { "name": "wedding", "subtitles": ["婚礼", "庆典"], "keyword": "婚礼" },
+              { "name": "birthday", "subtitles": ["生日", "庆祝"], "keyword": "生日" },
+              { "name": "party", "subtitles": ["聚会", "娱乐"], "keyword": "派对" },
+              { "name": "concert", "subtitles": ["演出", "音乐"], "keyword": "音乐会" },
+              { "name": "market", "subtitles": ["集市", "商业"], "keyword": "集市" },
+              { "name": "battlefield", "subtitles": ["战场", "战争"], "keyword": "战场" },
+              { "name": "laboratory", "subtitles": ["实验室", "科研"], "keyword": "实验室" },
+              { "name": "library", "subtitles": ["图书馆", "学习"], "keyword": "图书馆" },
+              { "name": "museum", "subtitles": ["博物馆", "文化"], "keyword": "博物馆" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "物品与道具扩展",
+        "categories": [
+          {
+            "name": "电子产品",
+            "tags": [
+              { "name": "laptop", "subtitles": ["电子", "电脑"], "keyword": "笔记本电脑" },
+              { "name": "tablet", "subtitles": ["电子", "平板"], "keyword": "平板电脑" },
+              { "name": "smartwatch", "subtitles": ["电子", "手表"], "keyword": "智能手表" },
+              { "name": "headphones", "subtitles": ["电子", "耳机"], "keyword": "耳机" },
+              { "name": "microphone", "subtitles": ["电子", "麦克风"], "keyword": "麦克风" },
+              { "name": "speaker", "subtitles": ["电子", "音响"], "keyword": "音响" },
+              { "name": "camera", "subtitles": ["电子", "相机"], "keyword": "数码相机" },
+              { "name": "printer", "subtitles": ["电子", "打印机"], "keyword": "打印机" },
+              { "name": "monitor", "subtitles": ["电子", "显示器"], "keyword": "显示器" },
+              { "name": "game_console", "subtitles": ["电子", "游戏机"], "keyword": "游戏机" }
+            ]
+          },
+          {
+            "name": "交通工具",
+            "tags": [
+              { "name": "car", "subtitles": ["交通", "汽车"], "keyword": "汽车" },
+              { "name": "bus", "subtitles": ["交通", "公交"], "keyword": "公交车" },
+              { "name": "bicycle", "subtitles": ["交通", "自行车"], "keyword": "自行车" },
+              { "name": "motorcycle", "subtitles": ["交通", "摩托车"], "keyword": "摩托车" },
+              { "name": "train", "subtitles": ["交通", "火车"], "keyword": "火车" },
+              { "name": "airplane", "subtitles": ["交通", "飞机"], "keyword": "飞机" },
+              { "name": "ship", "subtitles": ["交通", "船"], "keyword": "船" },
+              { "name": "subway", "subtitles": ["交通", "地铁"], "keyword": "地铁" },
+              { "name": "taxi", "subtitles": ["交通", "出租车"], "keyword": "出租车" },
+              { "name": "truck", "subtitles": ["交通", "卡车"], "keyword": "卡车" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "风格与艺术扩展",
+        "categories": [
+          {
+            "name": "艺术表现",
+            "tags": [
+              { "name": "abstract", "subtitles": ["抽象", "艺术"], "keyword": "抽象" },
+              { "name": "graffiti", "subtitles": ["涂鸦", "街头"], "keyword": "涂鸦" },
+              { "name": "line_art", "subtitles": ["线条画", "艺术"], "keyword": "线条画" },
+              { "name": "sketch", "subtitles": ["素描", "草图"], "keyword": "素描" },
+              { "name": "watercolor", "subtitles": ["水彩", "绘画"], "keyword": "水彩画" },
+              { "name": "digital_painting", "subtitles": ["数字", "绘画"], "keyword": "数字绘画" },
+              { "name": "pixel_art", "subtitles": ["像素", "复古"], "keyword": "像素艺术" },
+              { "name": "comic", "subtitles": ["漫画", "艺术"], "keyword": "漫画" },
+              { "name": "manga", "subtitles": ["日漫", "艺术"], "keyword": "日漫" },
+              { "name": "chibi", "subtitles": ["Q版", "风格"], "keyword": "Q版" }
+            ]
+          },
+          {
+            "name": "氛围与光影",
+            "tags": [
+              { "name": "dramatic_lighting", "subtitles": ["戏剧性", "光影"], "keyword": "戏剧光" },
+              { "name": "backlight", "subtitles": ["逆光", "光影"], "keyword": "逆光" },
+              { "name": "soft_light", "subtitles": ["柔光", "光影"], "keyword": "柔光" },
+              { "name": "hard_light", "subtitles": ["硬光", "光影"], "keyword": "硬光" },
+              { "name": "spotlight", "subtitles": ["聚光", "光影"], "keyword": "聚光灯" },
+              { "name": "glow", "subtitles": ["发光", "氛围"], "keyword": "发光" },
+              { "name": "shadow", "subtitles": ["阴影", "氛围"], "keyword": "阴影" },
+              { "name": "reflection", "subtitles": ["反射", "氛围"], "keyword": "反射" },
+              { "name": "rainbow", "subtitles": ["彩虹", "氛围"], "keyword": "彩虹" },
+              { "name": "mist", "subtitles": ["薄雾", "氛围"], "keyword": "薄雾" }
+            ]
+          }
+        ]
+      }
+    ]
+  }

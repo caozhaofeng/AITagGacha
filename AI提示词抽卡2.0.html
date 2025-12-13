@@ -1,0 +1,2274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SD 抽卡神器 - AI 提示词生成 (魔导书升级版)</title>
+    
+    <!-- =================================================================
+         外部依赖库引用
+    ================================================================== -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+            }
+        }
+    </script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* 基础样式 */
+        body {
+            background-color: #0f172a; 
+            color: #f1f5f9; 
+        }
+        @keyframes gradient-x {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        .animate-gradient-x {
+          background-size: 200% 200%;
+          animation: gradient-x 3s ease infinite;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .text-shadow-sm { text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        .select-none { user-select: none; -webkit-user-select: none; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            Copy, Lock, Unlock, RefreshCw, Wand2, Sparkles, Settings2, 
+            KeyRound, X, CheckSquare, Square, Plus, Minus, Trash2, Eraser, 
+            GripVertical, Languages, History, Save, Bookmark, ChevronRight, Loader2,
+            Download, Upload, FileJson, AlertTriangle, Menu, Settings,
+            Wrench, Shield, ShieldOff, Scale, ClipboardPaste, BrainCircuit,
+            CheckCircle2, XCircle, Zap, Play, Info, AlertCircle, FileText, RotateCcw, PenLine,
+            Github, ExternalLink, Code2, BookOpen, Dices, ArrowRight, FilePlus, Bot, ChevronDown, Folder,
+            Search, MoreVertical, LayoutGrid, Check, Maximize2, Minimize2, Layers, Edit3
+        } from 'lucide-react';
+
+        // --- 常量定义 ---
+        const INITIAL_QUALITY_TAGS = [
+            { id: 'q1', en: 'best quality', zh: '极致画质' },
+            { id: 'q2', en: 'amazing quality', zh: '惊人质量' },
+            { id: 'q3', en: 'very aesthetic', zh: '极具美感' },
+            { id: 'q4', en: 'absurdres', zh: '超高分辨率' },
+            { id: 'q5', en: '8k', zh: '8k分辨率' },
+            { id: 'q6', en: 'highly detailed', zh: '超细节' }
+        ];
+
+        const SLOT_CONFIG = [
+            { id: 'quality', label: '起手式 (Quality)', isFixed: true, icon: Sparkles },
+            { id: 'artist', label: '画师/风格 (Style)', icon: Wand2 },
+            { id: 'character', label: '角色 (Character)', icon: Settings2 },
+            { id: 'appearance', label: '外貌 (Appearance)', icon: Sparkles },
+            { id: 'clothing', label: '服装 (Attire)', icon: Sparkles },
+            { id: 'action', label: '动作 (Action)', icon: Wand2 },
+            { id: 'items', label: '物品 (Items)', icon: Settings2 },
+            { id: 'scene', label: '场景 (Background)', icon: Sparkles },
+            { id: 'composition', label: '构图 (Composition)', icon: Settings2 },
+        ];
+
+        const DEFAULT_SYSTEM_PROMPT = `# Role: Anime Art Director & Visual Storyteller
+You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts for Stable Diffusion. Your goal is to create vivid, logically coherent character illustrations with rich details.
+
+(此处省略较长的默认Prompt以节省空间，功能保持不变)
+`;
+
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        // --- 辅助算法：Prompt 预处理 ---
+        const preprocessPrompts = (rawString) => {
+            if (!rawString) return "";
+            const rawTags = rawString.split(/[,，\n]/).map(t => t.trim()).filter(t => t);
+            const tagMap = new Map(); 
+
+            rawTags.forEach(tagStr => {
+                let text = tagStr;
+                let weight = 1.0;
+                while (true) {
+                    if (text.startsWith('(') && text.endsWith(')')) {
+                        if (/^[^:]+:[0-9.]+$/.test(text.slice(1,-1))) break;
+                        weight *= 1.1;
+                        text = text.slice(1, -1);
+                    } else if (text.startsWith('[') && text.endsWith(']')) {
+                        weight *= 0.909; 
+                        text = text.slice(1, -1);
+                    } else {
+                        break;
+                    }
+                }
+                const explicitMatch = text.match(/^(.*):([0-9.]+)$/);
+                if (explicitMatch) {
+                    text = explicitMatch[1];
+                    weight *= parseFloat(explicitMatch[2]);
+                }
+                let cleanText = text.trim();
+                const key = cleanText.toLowerCase();
+                if (tagMap.has(key)) {
+                    const existing = tagMap.get(key);
+                    if (weight > existing.weight) {
+                        existing.weight = weight;
+                        existing.text = cleanText; 
+                    }
+                } else {
+                    tagMap.set(key, { text: cleanText, weight: weight });
+                }
+            });
+
+            const resultTags = [];
+            tagMap.forEach(({ text, weight }) => {
+                weight = Math.round(weight * 100) / 100;
+                if (weight === 1.0) resultTags.push(text);
+                else resultTags.push(`(${text}:${weight})`);
+            });
+            return resultTags.join(", ");
+        };
+
+        // --- 主组件 ---
+        function StableDiffusionGacha() {
+            // ================= 状态管理 =================
+            const [slots, setSlots] = useState({});
+            const [isRolling, setIsRolling] = useState(false); 
+            const [loadingText, setLoadingText] = useState("AI 生成中..."); 
+            const [showCopyFeedback, setShowCopyFeedback] = useState(false);
+            const [slotCopyFeedback, setSlotCopyFeedback] = useState(null); 
+            
+            const [generationMode, setGenerationMode] = useState('detailed');
+
+            // 交互状态
+            const [hoveredTagId, setHoveredTagId] = useState(null);
+            const [editingTagId, setEditingTagId] = useState(null);
+            const [selectedTagIds, setSelectedTagIds] = useState(new Set()); 
+            
+            // 聚焦模式 (Expand Slot)
+            const [expandedSlotId, setExpandedSlotId] = useState(null);
+
+            const [dragData, setDragData] = useState(null);
+            const [dropTarget, setDropTarget] = useState(null);
+            
+            const [apiKey, setApiKey] = useState('');
+            const [apiBaseUrl, setApiBaseUrl] = useState('https://api.deepseek.com');
+            const [apiError, setApiError] = useState(null);
+
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            const [activeSidebarTab, setActiveSidebarTab] = useState('generate');
+
+            const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+            const [showPromptSettings, setShowPromptSettings] = useState(false);
+            const [promptPresets, setPromptPresets] = useState([]);
+            const [newPromptPresetName, setNewPromptPresetName] = useState("");
+
+            const [history, setHistory] = useState([]);
+            const [historyIndex, setHistoryIndex] = useState(-1);
+            const isHistoryAction = useRef(false);
+            const actionSource = useRef('manual'); 
+
+            // --- 魔导书独立历史记录 ---
+            const [grimoireHistory, setGrimoireHistory] = useState([]);
+            const [grimoireHistoryIndex, setGrimoireHistoryIndex] = useState(-1);
+            const isGrimoireHistoryAction = useRef(false);
+
+            const [presets, setPresets] = useState([]);
+            const [newPresetName, setNewPresetName] = useState("");
+            const [presetNameError, setPresetNameError] = useState(false);
+            const fileInputRef = useRef(null);
+            const grimoireFileInputRef = useRef(null); 
+
+            const [themeInput, setThemeInput] = useState("");
+            const [generatedRawText, setGeneratedRawText] = useState("");
+
+            const [smartPasteContent, setSmartPasteContent] = useState("");
+            const [isSmartParsing, setIsSmartParsing] = useState(false);
+
+            // ================= 魔导书 (Grimoire) 升级版状态 =================
+            const [grimoireBooks, setGrimoireBooks] = useState([]);
+            const [viewingBook, setViewingBook] = useState(null); 
+            const [selectedGrimoireTags, setSelectedGrimoireTags] = useState(new Set()); 
+            const [grimoireExpansion, setGrimoireExpansion] = useState("");
+            const [isExpandingGrimoire, setIsExpandingGrimoire] = useState(false);
+            const [checkedGrimoireScopes, setCheckedGrimoireScopes] = useState(new Set());
+            // 魔导书单分类聚焦
+            const [expandedGrimoireCategory, setExpandedGrimoireCategory] = useState(null);
+            // 魔导书整组聚焦
+            const [expandedGrimoireGroup, setExpandedGrimoireGroup] = useState(null);
+            // 魔导书搜索
+            const [grimoireSearchQuery, setGrimoireSearchQuery] = useState("");
+            // 临时 Tag 输入
+            const [customGrimoireTagInput, setCustomGrimoireTagInput] = useState("");
+
+            // 新增状态：查看全部选中Tag，查看全部扩写词，全屏文本编辑器
+            const [viewingFullSelectedTags, setViewingFullSelectedTags] = useState(false);
+            const [viewingFullExpansion, setViewingFullExpansion] = useState(false);
+            const [viewingFullTextEditor, setViewingFullTextEditor] = useState(false);
+
+            const [confirmModal, setConfirmModal] = useState({ show: false, title: "", message: "", onConfirm: null });
+            const [toasts, setToasts] = useState([]);
+
+            const editInputRef = useRef(null);
+            const slotInputRefs = useRef({});
+            const scrollRefs = useRef({}); 
+            const isScrolling = useRef({}); 
+            const scrollTimeouts = useRef({});
+
+            // ================= 初始化与副作用 =================
+
+            useEffect(() => {
+                const savedKey = localStorage.getItem('deepseek_api_key');
+                if (savedKey) setApiKey(savedKey);
+
+                const savedPresets = localStorage.getItem('sd_gacha_presets');
+                if (savedPresets) {
+                    try { setPresets(JSON.parse(savedPresets)); } catch(e) {}
+                }
+
+                const savedPromptPresets = localStorage.getItem('sd_prompt_presets');
+                if (savedPromptPresets) {
+                    try { setPromptPresets(JSON.parse(savedPromptPresets)); } catch(e) {}
+                }
+
+                const savedBooks = localStorage.getItem('sd_grimoire_books');
+                if (savedBooks) {
+                    try { setGrimoireBooks(JSON.parse(savedBooks)); } catch(e) {}
+                } else {
+                    const savedLegacy = localStorage.getItem('sd_grimoire_lib');
+                    if (savedLegacy) {
+                        try {
+                            const parsed = JSON.parse(savedLegacy);
+                            let importedGroups = [];
+                            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].categories) {
+                                importedGroups = parsed;
+                            } else if (Array.isArray(parsed)) {
+                                importedGroups = [{
+                                    name: "默认分组",
+                                    categories: [{ name: "未分类", tags: parsed.map(item => ({ name: item.content || item, keyword: "" })) }]
+                                }];
+                            }
+                            if (importedGroups.length > 0) {
+                                const newBook = { id: generateId(), name: "我的魔导书 (旧版迁移)", description: "从旧版本自动迁移的数据", groups: importedGroups };
+                                setGrimoireBooks([newBook]);
+                                localStorage.setItem('sd_grimoire_books', JSON.stringify([newBook]));
+                            }
+                        } catch(e) {}
+                    }
+                }
+
+                const savedHistory = localStorage.getItem('sd_history_log');
+                if (savedHistory) {
+                    try {
+                        const parsedHistory = JSON.parse(savedHistory);
+                        if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
+                            setHistory(parsedHistory);
+                            setHistoryIndex(parsedHistory.length - 1);
+                            setSlots(parsedHistory[parsedHistory.length - 1].slots);
+                            return; 
+                        }
+                    } catch(e) {}
+                }
+
+                const initialSlots = {};
+                SLOT_CONFIG.forEach(config => {
+                    initialSlots[config.id] = {
+                        tags: config.id === 'quality' ? [...INITIAL_QUALITY_TAGS] : [],
+                        locked: config.id === 'quality',
+                        included: true,
+                    };
+                });
+                setSlots(initialSlots);
+            }, []);
+
+            useEffect(() => {
+                if (editingTagId && editInputRef.current) {
+                    editInputRef.current.focus();
+                }
+            }, [editingTagId]);
+
+            useEffect(() => {
+                if (grimoireBooks.length > 0) {
+                    localStorage.setItem('sd_grimoire_books', JSON.stringify(grimoireBooks));
+                }
+            }, [grimoireBooks]);
+
+            useEffect(() => {
+                if (Object.keys(slots).length === 0) return;
+                if (isHistoryAction.current) {
+                    isHistoryAction.current = false;
+                    return;
+                }
+                setHistory(prev => {
+                    const currentSlice = prev.slice(0, historyIndex + 1);
+                    const newEntry = {
+                        slots: JSON.parse(JSON.stringify(slots)),
+                        timestamp: new Date().toLocaleTimeString(),
+                        id: Date.now(),
+                        source: actionSource.current 
+                    };
+                    actionSource.current = 'manual'; 
+                    const newHistory = [...currentSlice, newEntry];
+                    if (newHistory.length > 50) newHistory.shift(); 
+                    localStorage.setItem('sd_history_log', JSON.stringify(newHistory));
+                    return newHistory;
+                });
+                setHistoryIndex(prev => prev + 1);
+            }, [slots]);
+
+            useEffect(() => {
+                if (history.length > 0 && historyIndex >= history.length) {
+                    setHistoryIndex(history.length - 1);
+                }
+            }, [history]);
+
+            // --- 魔导书历史记录逻辑 ---
+            useEffect(() => {
+                if (isGrimoireHistoryAction.current) {
+                    isGrimoireHistoryAction.current = false;
+                    return;
+                }
+                // 当 selectedGrimoireTags 变化时，推入历史记录
+                // 初始化时也会执行一次，这是预期的，作为初始状态
+                setGrimoireHistory(prev => {
+                     const currentSlice = prev.slice(0, grimoireHistoryIndex + 1);
+                     return [...currentSlice, new Set(selectedGrimoireTags)];
+                });
+                setGrimoireHistoryIndex(prev => prev + 1);
+            }, [selectedGrimoireTags]);
+
+
+            // 快捷键优化：ESC 呼出/隐藏侧边栏, Ctrl+Z Grimoire Undo
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    const activeTag = document.activeElement.tagName;
+                    const isInputActive = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+
+                    // 优先级 1: 输入框内的 ESC，只取消焦点
+                    if (isInputActive && e.key === 'Escape') {
+                        e.target.blur();
+                        return;
+                    }
+
+                    // 优先级 2: 模态框关闭
+                    if (e.key === 'Escape') {
+                        if (viewingFullSelectedTags) { setViewingFullSelectedTags(false); return; }
+                        if (viewingFullExpansion) { setViewingFullExpansion(false); return; }
+                        if (viewingFullTextEditor) { setViewingFullTextEditor(false); return; }
+                        if (expandedGrimoireCategory) { setExpandedGrimoireCategory(null); return; }
+                        if (expandedGrimoireGroup) { setExpandedGrimoireGroup(null); return; }
+                        if (viewingBook) { setViewingBook(null); return; }
+                        if (expandedSlotId) { setExpandedSlotId(null); return; }
+                        if (confirmModal.show) { setConfirmModal({ ...confirmModal, show: false }); return; }
+                        
+                        // 优先级 3: 切换侧边栏
+                        e.preventDefault();
+                        setIsSidebarOpen(prev => !prev);
+                        return;
+                    }
+
+                    // Undo/Redo (Global but contextual)
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                        // 如果在文本输入框内，不干预默认的撤销
+                        if (isInputActive) return;
+
+                        e.preventDefault();
+                        // 判定是否处于魔导书上下文
+                        const isGrimoireContext = activeSidebarTab === 'grimoire' || viewingBook;
+                        
+                        if (isGrimoireContext) {
+                            e.shiftKey ? redoGrimoire() : undoGrimoire();
+                        } else {
+                            e.shiftKey ? redo() : undo();
+                        }
+                        return;
+                    }
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                         if (isInputActive) return;
+                         e.preventDefault();
+                         const isGrimoireContext = activeSidebarTab === 'grimoire' || viewingBook;
+                         if (isGrimoireContext) {
+                            redoGrimoire();
+                         } else {
+                            redo();
+                         }
+                         return;
+                    }
+
+                    if (isInputActive) {
+                        if (!e.ctrlKey && !e.metaKey) return; 
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'c') return; 
+                    }
+                    
+                    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'm')) {
+                        e.preventDefault();
+                        setIsSidebarOpen(prev => !prev);
+                    }
+                    
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                        if (!isInputActive && selectedTagIds.size > 0) {
+                            e.preventDefault();
+                            deleteSelectedTags();
+                        }
+                    }
+                    
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+                        if (!isInputActive && selectedTagIds.size > 0) {
+                            e.preventDefault();
+                            copySelectedTags();
+                        }
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [historyIndex, history, isSidebarOpen, selectedTagIds, slots, viewingBook, expandedSlotId, expandedGrimoireCategory, expandedGrimoireGroup, viewingFullSelectedTags, viewingFullExpansion, viewingFullTextEditor, confirmModal, activeSidebarTab, grimoireHistoryIndex, grimoireHistory]);
+
+            // ================= Logic Functions =================
+
+            const showToast = (message, type = 'info') => {
+                const id = Date.now();
+                setToasts(prev => [...prev, { id, message, type }]);
+                setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+            };
+            const removeToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
+
+            const savePromptPreset = () => {
+                if (!newPromptPresetName.trim()) { showToast("请输入方案名称", "warning"); return; }
+                const newPreset = { id: Date.now(), name: newPromptPresetName.trim(), content: systemPrompt };
+                const updated = [...promptPresets, newPreset];
+                setPromptPresets(updated);
+                localStorage.setItem('sd_prompt_presets', JSON.stringify(updated));
+                setNewPromptPresetName("");
+                showToast("提示词方案已保存", "success");
+            };
+            const loadPromptPreset = (preset) => { setSystemPrompt(preset.content); showToast(`已应用方案：${preset.name}`, "success"); };
+            const deletePromptPreset = (id) => {
+                const updated = promptPresets.filter(p => p.id !== id);
+                setPromptPresets(updated);
+                localStorage.setItem('sd_prompt_presets', JSON.stringify(updated));
+            };
+            const restoreDefaultPrompt = () => { setSystemPrompt(DEFAULT_SYSTEM_PROMPT); showToast("已恢复默认提示词", "success"); };
+
+            const handleSyncScroll = (slotId, source) => {
+                const refs = scrollRefs.current[slotId];
+                if (!refs || !refs.en || !refs.zh) return;
+                const sourceEl = source === 'en' ? refs.en : refs.zh;
+                const targetEl = source === 'en' ? refs.zh : refs.en;
+                if (isScrolling.current[slotId] && isScrolling.current[slotId] !== source) return;
+                isScrolling.current[slotId] = source;
+                const maxSource = sourceEl.scrollHeight - sourceEl.clientHeight;
+                const maxTarget = targetEl.scrollHeight - targetEl.clientHeight;
+                if (maxSource > 0 && maxTarget > 0) {
+                    const percentage = sourceEl.scrollTop / maxSource;
+                    targetEl.scrollTop = percentage * maxTarget;
+                }
+                if (scrollTimeouts.current[slotId]) clearTimeout(scrollTimeouts.current[slotId]);
+                scrollTimeouts.current[slotId] = setTimeout(() => { isScrolling.current[slotId] = null; }, 50);
+            };
+
+            const undo = useCallback(() => {
+                if (historyIndex > 0) {
+                    isHistoryAction.current = true;
+                    setHistoryIndex(historyIndex - 1);
+                    setSlots(history[historyIndex - 1].slots);
+                }
+            }, [historyIndex, history]);
+
+            const redo = useCallback(() => {
+                if (historyIndex < history.length - 1) {
+                    isHistoryAction.current = true;
+                    setHistoryIndex(historyIndex + 1);
+                    setSlots(history[historyIndex + 1].slots);
+                }
+            }, [historyIndex, history]);
+
+            // 魔导书 Undo/Redo
+            const undoGrimoire = useCallback(() => {
+                if (grimoireHistoryIndex > 0) {
+                    isGrimoireHistoryAction.current = true;
+                    const prevSet = grimoireHistory[grimoireHistoryIndex - 1];
+                    setSelectedGrimoireTags(new Set(prevSet));
+                    setGrimoireHistoryIndex(prev => prev - 1);
+                    showToast("已撤销选择", "info");
+                }
+            }, [grimoireHistoryIndex, grimoireHistory]);
+
+            const redoGrimoire = useCallback(() => {
+                if (grimoireHistoryIndex < grimoireHistory.length - 1) {
+                    isGrimoireHistoryAction.current = true;
+                    const nextSet = grimoireHistory[grimoireHistoryIndex + 1];
+                    setSelectedGrimoireTags(new Set(nextSet));
+                    setGrimoireHistoryIndex(prev => prev + 1);
+                    showToast("已重做选择", "info");
+                }
+            }, [grimoireHistoryIndex, grimoireHistory]);
+
+            const jumpToHistory = (realIndex) => {
+                isHistoryAction.current = true;
+                setHistoryIndex(realIndex);
+                setSlots(history[realIndex].slots);
+            };
+
+            // Batch Tools
+            const batchLockAll = () => {
+                setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].locked=true); return n; });
+                showToast("已锁定所有模块", "success");
+            };
+            const batchUnlockAll = () => {
+                setSlots(prev => { const n={...prev}; SLOT_CONFIG.forEach(c=>{ if(!c.isFixed) n[c.id].locked=false; }); return n; });
+                showToast("已解锁所有模块", "success");
+            };
+            const batchIncludeAll = () => {
+                setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].included=true); return n; });
+                showToast("已勾选所有模块", "success");
+            };
+            const batchExcludeAll = () => {
+                setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].included=false); return n; });
+                showToast("已取消勾选所有模块", "success");
+            };
+            const batchClearWeights = () => {
+                setSlots(prev => {
+                    const next = { ...prev };
+                    Object.keys(next).forEach(key => {
+                        if (next[key].tags) {
+                            next[key].tags = next[key].tags.map(tag => {
+                                let text = tag.en.replace(/^\((.+):[0-9.]+\)$/, '$1').replace(/^\((.+)\)$/, '$1');
+                                return { ...tag, en: text };
+                            });
+                        }
+                    });
+                    return next;
+                });
+                showToast("已重置所有权重", "success");
+            };
+            const batchClearAllContent = () => {
+                setConfirmModal({
+                    show: true, title: "清空未锁定内容", message: "确定要清空所有未锁定卡槽的内容吗？\n(注意：已锁定的内容将被保留)",
+                    onConfirm: () => {
+                        setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k => { if (!n[k].locked) n[k].tags = []; }); return n; });
+                        setConfirmModal({ show: false, title: "", message: "", onConfirm: null });
+                        showToast("已清空未锁定内容", "success");
+                    }
+                });
+            };
+
+            // API Calls (DeepSeek)
+            const callDeepSeekGenerateRaw = async (theme, mode, currentSystemPrompt) => {
+                const validApiKey = apiKey ? apiKey.trim() : "";
+                if (/[^\x00-\x7F]/.test(validApiKey)) throw new Error("API Key 包含非法字符");
+                
+                const randomSeed = Math.random().toString(36).substring(7);
+                const modeInstruction = `Mode: ${mode === 'detailed' ? 'Rich, highly detailed, atmospheric (30+ tags)' : 'Concise, specific core tags (15-20 tags)'}.`;
+                const fullSystemPrompt = `${currentSystemPrompt}\n\n${modeInstruction}`;
+                
+                const userPrompt = theme ? `Theme: ${theme} [Random Seed: ${randomSeed}]` : `Theme: Random creative anime illustration [Random Seed: ${randomSeed}]`;
+                
+                const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${validApiKey}` },
+                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "system", content: fullSystemPrompt }, { role: "user", content: userPrompt }], temperature: 1.0 }) 
+                });
+                if (!response.ok) throw new Error("API 请求失败");
+                const data = await response.json();
+                return data.choices[0].message.content.trim();
+            };
+
+            const callDeepSeekSmartParse = async (rawText) => {
+                const validApiKey = apiKey ? apiKey.trim() : "";
+                if (/[^\x00-\x7F]/.test(validApiKey)) throw new Error("API Key 包含非法字符");
+                const systemPrompt = `You are a Stable Diffusion prompt parser.\nAnalyze the raw prompt string and categorize tags into these slots:\nquality, artist, character, appearance, clothing, action, items, scene, composition.\nInput: Raw prompt string.\nOutput: Valid JSON object { "slot_name": ["tag1", "tag2"] }.\nSplit mixed tags if necessary. Preserve weights like (tag:1.2).\nReturn ONLY valid JSON.`;
+                const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${validApiKey}` },
+                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: rawText }], temperature: 0.1, response_format: { type: "json_object" } })
+                });
+                if (!response.ok) throw new Error("API 请求失败");
+                const data = await response.json();
+                return JSON.parse(data.choices[0].message.content);
+            };
+
+            const callDeepSeekTranslate = async (slotsToTranslate) => {
+                 const validApiKey = apiKey ? apiKey.trim() : "";
+                 if (/[^\x00-\x7F]/.test(validApiKey)) throw new Error("API Key 包含非法字符");
+                 let translateFields = {};
+                 SLOT_CONFIG.forEach(c => {
+                    const slot = slotsToTranslate[c.id];
+                    if (slot && slot.tags.length > 0) translateFields[c.id] = slot.tags.map(t => t.en);
+                 });
+                 if (Object.keys(translateFields).length === 0) return {};
+                 const systemPrompt = "You are a translator. Input is JSON { key: [tags] }. Output JSON { key: [{ en: tag, zh: translation }] }. Maintain all keys.";
+                 const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${validApiKey}` },
+                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify(translateFields) }], temperature: 1.0, response_format: { type: "json_object" } })
+                });
+                if (!response.ok) throw new Error("API 请求失败");
+                const data = await response.json();
+                return JSON.parse(data.choices[0].message.content);
+            };
+
+            // Workflows
+            const handleSmartPaste = async () => {
+                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请先配置 API Key", "error"); return; }
+                if (!smartPasteContent.trim()) { showToast("请先粘贴提示词", "warning"); return; }
+                setIsSmartParsing(true); setLoadingText("智能解析中..."); 
+                try {
+                    const cleanedInput = preprocessPrompts(smartPasteContent);
+                    const result = await callDeepSeekSmartParse(cleanedInput);
+                    let nextSlots = JSON.parse(JSON.stringify(slots)); 
+                    let leftoverTags = [];
+                    Object.keys(result).forEach(key => {
+                        if (nextSlots[key] && Array.isArray(result[key])) {
+                            const tagsToAdd = result[key];
+                            if (nextSlots[key].locked) leftoverTags.push(...tagsToAdd);
+                            else {
+                                 const uniqueTags = []; const seen = new Set();
+                                 tagsToAdd.forEach(t => { const lower = t.toLowerCase(); if(!seen.has(lower)){ seen.add(lower); uniqueTags.push(t); } });
+                                 const newTags = uniqueTags.map(tagStr => ({ id: generateId(), en: tagStr, zh: '?' }));
+                                 nextSlots[key].tags = newTags; 
+                            }
+                        }
+                    });
+                    setSmartPasteContent(leftoverTags.join(", "));
+                    setSlots(nextSlots);
+                    setLoadingText("自动翻译中...");
+                    const translatedData = await callDeepSeekTranslate(nextSlots);
+                    Object.keys(nextSlots).forEach(key => {
+                        if (translatedData[key] && Array.isArray(translatedData[key])) {
+                            nextSlots[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh }));
+                        }
+                    });
+                    actionSource.current = 'ai'; setSlots(nextSlots);
+                    if (leftoverTags.length > 0) showToast(`解析完成！\n有 ${leftoverTags.length} 个提示词因模块锁定未填入。`, "info");
+                    else { setIsSidebarOpen(false); showToast("智能解析完成！", "success"); }
+                } catch (e) { console.error(e); showToast("解析失败: " + e.message, "error"); } finally { setIsSmartParsing(false); }
+            };
+
+            const savePreset = () => {
+                if (!newPresetName.trim()) { setPresetNameError(true); setTimeout(() => setPresetNameError(false), 500); showToast("请输入预设名称", "warning"); return; }
+                const newPreset = { id: Date.now(), name: newPresetName.trim(), createdAt: new Date().toLocaleString(), slots: JSON.parse(JSON.stringify(slots)) };
+                const updatedPresets = [...presets, newPreset];
+                setPresets(updatedPresets); localStorage.setItem('sd_gacha_presets', JSON.stringify(updatedPresets));
+                setNewPresetName(""); showToast("预设已保存", "success");
+            };
+            const loadPreset = (preset) => {
+                actionSource.current = 'ai'; const restoredSlots = {};
+                SLOT_CONFIG.forEach(config => {
+                    const savedSlot = preset.slots[config.id];
+                    if (savedSlot) restoredSlots[config.id] = { tags: savedSlot.tags || [], locked: savedSlot.locked ?? (config.id === 'quality'), included: savedSlot.included ?? true };
+                    else restoredSlots[config.id] = { tags: config.id === 'quality' ? [...INITIAL_QUALITY_TAGS] : [], locked: config.id === 'quality', included: true };
+                });
+                setSlots(restoredSlots); setIsSidebarOpen(false); showToast(`已加载预设：${preset.name}`, "success");
+            };
+            const deletePreset = (id, e) => {
+                if (e) { e.stopPropagation(); e.preventDefault(); }
+                const updatedPresets = presets.filter(p => p.id !== id);
+                setPresets(updatedPresets); localStorage.setItem('sd_gacha_presets', JSON.stringify(updatedPresets));
+                showToast("预设已删除", "success");
+            };
+            const exportPresets = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(presets, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "sd_gacha_presets.json");
+                document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
+                showToast("预设导出成功", "success");
+            };
+            const triggerImport = () => { if(fileInputRef.current) fileInputRef.current.click(); };
+            const handleImportFile = (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        if (!Array.isArray(importedData)) { showToast("导入失败：格式错误", "error"); return; }
+                        const newPresets = importedData.map(p => ({ ...p, id: Date.now() + Math.random(), name: p.name + " (导入)" }));
+                        const combinedPresets = [...presets, ...newPresets];
+                        setPresets(combinedPresets); localStorage.setItem('sd_gacha_presets', JSON.stringify(combinedPresets));
+                        showToast(`成功导入 ${newPresets.length} 个预设！`, "success");
+                    } catch (err) { showToast("导入失败：无法解析", "error"); }
+                };
+                reader.readAsText(file); e.target.value = null; 
+            };
+            const handleSaveSettings = () => { localStorage.setItem('deepseek_api_key', apiKey); if (apiKey) showToast("API Key 已保存", "success"); };
+
+            const handleGenerateText = async () => {
+                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                setApiError(null); setLoadingText("正在构思..."); setIsRolling(true);
+                try {
+                    const text = await callDeepSeekGenerateRaw(themeInput, generationMode, systemPrompt);
+                    setGeneratedRawText(text); showToast("文本生成成功，请继续下一步", "success");
+                } catch (e) { setApiError(e.message); showToast("生成失败: " + e.message, "error"); } finally { setIsRolling(false); }
+            };
+
+            // Modified to accept optional text override
+            const handleParseAndFill = async (textOverride = null) => {
+                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                
+                // Logic update: use expansion if available and not overridden
+                let textToProcess = textOverride;
+                if (!textToProcess) {
+                    textToProcess = grimoireExpansion ? grimoireExpansion : generatedRawText;
+                    if (!textOverride && !generatedRawText && !grimoireExpansion && selectedGrimoireTags.size > 0) {
+                         textToProcess = Array.from(selectedGrimoireTags).join(", ");
+                    }
+                }
+
+                if (!textToProcess || !textToProcess.trim()) { showToast("请先生成或输入提示词文本", "warning"); return; }
+                
+                setApiError(null); setLoadingText("正在解析..."); setIsRolling(true);
+                
+                // Update generatedRawText visually if override is used or using expansion
+                if (!textOverride && grimoireExpansion) {
+                    setGeneratedRawText(grimoireExpansion);
+                } else if (typeof textOverride === 'string') {
+                    setGeneratedRawText(textOverride);
+                } else if (!generatedRawText && selectedGrimoireTags.size > 0) {
+                    setGeneratedRawText(textToProcess);
+                }
+
+                try {
+                    const cleanedInput = preprocessPrompts(textToProcess);
+                    const result = await callDeepSeekSmartParse(cleanedInput);
+                    let nextSlots = JSON.parse(JSON.stringify(slots)); let leftoverTags = [];
+                    Object.keys(result).forEach(key => {
+                        if (nextSlots[key] && Array.isArray(result[key])) {
+                            if (nextSlots[key].locked) leftoverTags.push(...result[key]);
+                            else {
+                                 const uniqueTags = []; const seen = new Set();
+                                 result[key].forEach(t => { const lower = t.toLowerCase(); if(!seen.has(lower)){ seen.add(lower); uniqueTags.push(t); } });
+                                 nextSlots[key].tags = uniqueTags.map(tagStr => ({ id: generateId(), en: tagStr, zh: '?' })); 
+                            }
+                        }
+                    });
+                    setSlots(nextSlots); setLoadingText("正在翻译...");
+                    const translatedData = await callDeepSeekTranslate(nextSlots);
+                    Object.keys(nextSlots).forEach(key => {
+                        if (translatedData[key] && Array.isArray(translatedData[key])) {
+                            nextSlots[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh }));
+                        }
+                    });
+                    actionSource.current = 'ai'; setSlots(nextSlots);
+                    if (leftoverTags.length > 0) showToast(`解析完成，但有 ${leftoverTags.length} 个词因锁定未填入。`, "info");
+                    else { setIsSidebarOpen(false); showToast("解析并填入完成！", "success"); }
+                } catch (e) { setApiError(e.message); showToast("处理失败: " + e.message, "error"); } finally { setIsRolling(false); }
+            };
+
+            const handleOneClickRoll = async () => {
+                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                setApiError(null); setLoadingText("AI 创作中..."); setIsRolling(true);
+                try {
+                    const text = await callDeepSeekGenerateRaw(themeInput, generationMode, systemPrompt);
+                    setGeneratedRawText(text); 
+                    const cleanedInput = preprocessPrompts(text);
+                    const result = await callDeepSeekSmartParse(cleanedInput);
+                    let nextSlots = JSON.parse(JSON.stringify(slots)); 
+                    Object.keys(result).forEach(key => {
+                        if (nextSlots[key] && Array.isArray(result[key])) {
+                            if (!nextSlots[key].locked) {
+                                 const uniqueTags = [...new Set(result[key].map(t=>t.toLowerCase()))].map(l => result[key].find(o=>o.toLowerCase()===l));
+                                 nextSlots[key].tags = uniqueTags.map(tagStr => ({ id: generateId(), en: tagStr, zh: '?' })); 
+                            }
+                        }
+                    });
+                    const translatedData = await callDeepSeekTranslate(nextSlots);
+                    Object.keys(nextSlots).forEach(key => {
+                        if (translatedData[key] && Array.isArray(translatedData[key])) {
+                            nextSlots[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh }));
+                        }
+                    });
+                    actionSource.current = 'ai'; setSlots(nextSlots);
+                    showToast("一键 AI 抽卡完成！", "success");
+                } catch (e) { setApiError(e.message); showToast("抽卡失败: " + e.message, "error"); } finally { setIsRolling(false); }
+            };
+
+            const toggleGrimoireTag = (tagName) => {
+                setSelectedGrimoireTags(prev => {
+                    const next = new Set(prev);
+                    if (next.has(tagName)) next.delete(tagName);
+                    else next.add(tagName);
+                    return next;
+                });
+            };
+
+            const addCustomGrimoireTag = () => {
+                if (customGrimoireTagInput.trim()) {
+                    toggleGrimoireTag(customGrimoireTagInput.trim());
+                    setCustomGrimoireTagInput("");
+                }
+            };
+
+            const clearSelectedGrimoireTags = () => {
+                setSelectedGrimoireTags(new Set());
+            };
+            
+            // Helper to copy text
+            const copyToClipboard = (text) => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast("已复制到剪贴板", "success");
+            };
+            
+            // Helper to translate text using LLM
+            const handleTranslateExpansion = async () => {
+                if (!apiKey || !grimoireExpansion) return;
+                setLoadingText("AI 翻译中...");
+                setIsExpandingGrimoire(true); // Reuse loading state
+                try {
+                    const systemMsg = "You are a professional translator. Translate the following text into Chinese. Keep the tone accurate and concise. Only output the translated text.";
+                    const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                        body: JSON.stringify({ 
+                            model: "deepseek-chat", 
+                            messages: [{ role: "system", content: systemMsg }, { role: "user", content: grimoireExpansion }], 
+                            temperature: 0.3 
+                        }) 
+                    });
+                    
+                    if (!response.ok) throw new Error("Translation failed");
+                    const data = await response.json();
+                    const translatedText = data.choices[0].message.content.trim();
+                    setGrimoireExpansion(prev => prev + "\n\n--- 翻译 ---\n" + translatedText);
+                    showToast("翻译完成", "success");
+                } catch (e) {
+                    showToast("翻译失败: " + e.message, "error");
+                } finally {
+                    setIsExpandingGrimoire(false);
+                }
+            };
+            
+            // Helper to find tag info (translation) from books
+            const findTagInfo = useCallback((tagName) => {
+                for (const book of grimoireBooks) {
+                    for (const group of book.groups) {
+                        if (!group.categories) continue;
+                        for (const cat of group.categories) {
+                            if (!cat.tags) continue;
+                            const found = cat.tags.find(t => t.name === tagName);
+                            if (found) return found;
+                        }
+                    }
+                }
+                return null;
+            }, [grimoireBooks]);
+
+
+            const triggerImportGrimoire = () => { if(grimoireFileInputRef.current) grimoireFileInputRef.current.click(); };
+            
+            const handleImportGrimoireFile = (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        let newBook = null;
+                        if (importedData.id && importedData.groups) {
+                            newBook = { ...importedData, id: generateId(), name: importedData.name + " (导入)" };
+                        }
+                        else if (importedData.groups && Array.isArray(importedData.groups)) {
+                            newBook = {
+                                id: generateId(),
+                                name: importedData.metadata?.name || file.name.replace('.json', '') || "导入的魔导书",
+                                description: importedData.metadata?.description || "导入的数据",
+                                groups: importedData.groups
+                            };
+                        }
+                        else if (Array.isArray(importedData)) {
+                             newBook = {
+                                id: generateId(),
+                                name: file.name.replace('.json', '') || "导入的魔导书",
+                                description: "从数组列表导入",
+                                groups: [{
+                                    name: "默认分组",
+                                    categories: [{
+                                        name: "未分类",
+                                        tags: importedData.map(item => {
+                                            if (typeof item === 'string') return { name: item, keyword: '' };
+                                            return { name: item.content || item.name || '', keyword: item.keyword || '' };
+                                        })
+                                    }]
+                                }]
+                            };
+                        }
+
+                        if (newBook) {
+                            const updatedBooks = [...grimoireBooks, newBook];
+                            setGrimoireBooks(updatedBooks);
+                            showToast(`成功导入魔导书：${newBook.name}`, "success");
+                        } else {
+                            showToast("导入失败：无法识别的 JSON 格式", "error");
+                        }
+                    } catch (err) { showToast("导入失败：无法解析文件", "error"); }
+                };
+                reader.readAsText(file); e.target.value = null; 
+            };
+
+            const deleteGrimoireBook = (id, e) => {
+                e.stopPropagation();
+                setConfirmModal({
+                    show: true, title: "删除魔导书", message: "确定要删除这本魔导书吗？此操作无法撤销。",
+                    onConfirm: () => {
+                        const updated = grimoireBooks.filter(b => b.id !== id);
+                        setGrimoireBooks(updated);
+                        setConfirmModal({ show: false, title: "", message: "", onConfirm: null });
+                        showToast("已删除魔导书", "success");
+                    }
+                });
+            };
+
+            const openGrimoireBook = (book) => {
+                setViewingBook(book);
+                setGrimoireSearchQuery(""); // 重置搜索
+                setCheckedGrimoireScopes(new Set()); 
+            };
+
+            const toggleGrimoireScope = (scopeId) => {
+                setCheckedGrimoireScopes(prev => {
+                    const next = new Set(prev);
+                    if (next.has(scopeId)) next.delete(scopeId);
+                    else next.add(scopeId);
+                    return next;
+                });
+            };
+
+            const toggleGrimoireGroup = (groupIndex) => {
+                if (!viewingBook) return;
+                const group = viewingBook.groups[groupIndex];
+                if (!group) return;
+                const allScopes = group.categories.map((_, cIdx) => `${groupIndex}-${cIdx}`);
+                const isAllSelected = allScopes.every(s => checkedGrimoireScopes.has(s));
+                setCheckedGrimoireScopes(prev => {
+                    const next = new Set(prev);
+                    allScopes.forEach(s => {
+                        if (isAllSelected) next.delete(s);
+                        else next.add(s);
+                    });
+                    return next;
+                });
+            };
+
+            const handleSelectAllGroups = () => {
+                if (!viewingBook) return;
+                const allScopes = new Set();
+                viewingBook.groups.forEach((group, gIndex) => {
+                    group.categories.forEach((_, cIndex) => {
+                        allScopes.add(`${gIndex}-${cIndex}`);
+                    });
+                });
+                
+                if (allScopes.size === checkedGrimoireScopes.size) {
+                    setCheckedGrimoireScopes(new Set());
+                } else {
+                    setCheckedGrimoireScopes(allScopes);
+                }
+            };
+            
+            // Helper to calculate total scopes count for a book
+            const getTotalScopesCount = (book) => {
+                if (!book) return 0;
+                return book.groups.reduce((acc, group) => acc + (group.categories ? group.categories.length : 0), 0);
+            };
+
+            const handleRandomRollPerGroup = () => {
+                if (!viewingBook || checkedGrimoireScopes.size === 0) {
+                    showToast("请先勾选至少一个大模块中的分类", "warning");
+                    return;
+                }
+
+                // Group checked scopes by Group Index
+                const checkedGroups = {};
+                checkedGrimoireScopes.forEach(scope => {
+                    const [gIndex, cIndex] = scope.split('-').map(Number);
+                    if (!checkedGroups[gIndex]) checkedGroups[gIndex] = [];
+                    checkedGroups[gIndex].push(cIndex);
+                });
+
+                let rolledTags = [];
+                Object.keys(checkedGroups).forEach(gIndexStr => {
+                    const gIndex = parseInt(gIndexStr);
+                    const categoryIndices = checkedGroups[gIndex];
+                    const group = viewingBook.groups[gIndex];
+                    
+                    // Collect all tags from checked categories in this group
+                    let pool = [];
+                    categoryIndices.forEach(cIndex => {
+                        const category = group.categories[cIndex];
+                        if (category && category.tags) {
+                            pool = pool.concat(category.tags);
+                        }
+                    });
+
+                    if (pool.length > 0) {
+                        const randomTag = pool[Math.floor(Math.random() * pool.length)];
+                        rolledTags.push(randomTag.name);
+                    }
+                });
+
+                if (rolledTags.length > 0) {
+                    setSelectedGrimoireTags(prev => {
+                        const next = new Set(prev);
+                        rolledTags.forEach(t => next.add(t));
+                        return next;
+                    });
+                    showToast(`已从 ${Object.keys(checkedGroups).length} 个分组中各抽取了 1 个标签`, "success");
+                }
+            };
+
+            const handleRandomRollFromSelection = () => {
+                handleRandomRollPerGroup();
+            };
+
+            const handleExpandGrimoire = async () => {
+                if (!apiKey) { showToast("请配置 API Key", "error"); return; }
+                if (selectedGrimoireTags.size === 0) { showToast("请先选择至少一个 Tag", "warning"); return; }
+                setIsExpandingGrimoire(true);
+                const selectedContent = Array.from(selectedGrimoireTags).join(", ");
+                try {
+                    const expandedText = await callDeepSeekGenerateRaw(selectedContent, 'detailed', systemPrompt);
+                    setGrimoireExpansion(expandedText);
+                    showToast("AI 扩写完成！", "success");
+                } catch (e) {
+                    showToast("扩写失败: " + e.message, "error");
+                } finally {
+                    setIsExpandingGrimoire(false);
+                }
+            };
+
+            const handleSendExpansionToParse = () => {
+                if (!grimoireExpansion.trim()) return;
+                setGeneratedRawText(grimoireExpansion);
+                setActiveSidebarTab('generate');
+                setIsSidebarOpen(true);
+                setViewingBook(null); 
+                showToast("已填入生成器，请点击 '分词并填入'", "success");
+            };
+
+            const handleSendSelectionToParse = async (textOverride = null) => {
+                let text = textOverride;
+                
+                if (!text) {
+                    if (grimoireExpansion) {
+                        text = grimoireExpansion;
+                    } else {
+                        text = Array.from(selectedGrimoireTags).join(", ");
+                    }
+                }
+                
+                if (!text) { 
+                    showToast("没有内容可发送", "warning"); 
+                    return; 
+                }
+
+                if (viewingBook) {
+                    setViewingBook(null);
+                }
+
+                setGeneratedRawText(text);
+                setActiveSidebarTab('generate');
+                
+                await handleParseAndFill(text);
+            };
+
+            const handleUseExpansion = () => {
+                const textToUse = grimoireExpansion || Array.from(selectedGrimoireTags).join(", ");
+                if (!textToUse) return;
+                
+                setGeneratedRawText(textToUse);
+                setActiveSidebarTab('generate');
+                if (viewingBook) setViewingBook(null);
+                showToast("已填入文本编辑框，请继续操作", "success");
+            };
+
+            const translateAll = async () => {
+                if (isRolling) return;
+                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                let hasTags = false; SLOT_CONFIG.forEach(c => { if (slots[c.id]?.tags.length > 0) hasTags = true; });
+                if (!hasTags) { showToast("没有可翻译的标签", "warning"); return; }
+                setApiError(null); setLoadingText("翻译中..."); setIsRolling(true); actionSource.current = 'ai';
+                try {
+                    const translatedData = await callDeepSeekTranslate(slots);
+                    setSlots(prev => {
+                        const next = JSON.parse(JSON.stringify(prev));
+                        Object.keys(next).forEach(key => { if (next[key] && translatedData[key]) next[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh })); });
+                        return next;
+                    });
+                    showToast("翻译完成", "success");
+                } catch (err) { setApiError("翻译失败: " + err.message); showToast("翻译失败: " + err.message, "error"); } finally { setIsRolling(false); }
+            };
+
+            const adjustTagWeight = (slotId, tagId, delta) => {
+                setSlots(prev => {
+                    const slot = prev[slotId];
+                    const newTags = slot.tags.map(t => {
+                        if (t.id !== tagId) return t;
+                        let rawText = t.en; let weight = 1.0;
+                        const weightMatch = rawText.match(/^\((.+):([0-9.]+)\)$/);
+                        if (weightMatch) { rawText = weightMatch[1]; weight = parseFloat(weightMatch[2]); } 
+                        else { const parenMatch = rawText.match(/^\((.+)\)$/); if (parenMatch && !rawText.includes(':')) { rawText = parenMatch[1]; weight = 1.1; } }
+                        let newWeight = Math.round((weight + delta) * 10) / 10;
+                        let newEn = rawText;
+                        if (newWeight !== 1.0) { if (newWeight < 0.1) newWeight = 0.1; newEn = `(${rawText}:${newWeight.toFixed(1)})`; }
+                        return { ...t, en: newEn };
+                    });
+                    return { ...prev, [slotId]: { ...slot, tags: newTags } };
+                });
+            };
+
+            const addTag = (slotId, rawText) => {
+                if (!rawText) return;
+                const newTagsRaw = rawText.split(/[,\.，。]/).map(t => t.trim()).filter(t => t.length > 0);
+                if (newTagsRaw.length === 0) return;
+                const newTags = newTagsRaw.map(text => ({ id: generateId(), en: text, zh: '?' }));
+                setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], tags: [...prev[slotId].tags, ...newTags] } }));
+            };
+
+            const removeTag = (slotId, tagId) => {
+                setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], tags: prev[slotId].tags.filter(t => t.id !== tagId) } }));
+                if (selectedTagIds.has(tagId)) setSelectedTagIds(prev => { const next = new Set(prev); next.delete(tagId); return next; });
+            };
+
+            const deleteSelectedTags = () => {
+                if (selectedTagIds.size === 0) return;
+                setSlots(prev => {
+                    const next = { ...prev };
+                    Object.keys(next).forEach(key => { if (next[key].tags) next[key].tags = next[key].tags.filter(t => !selectedTagIds.has(t.id)); });
+                    return next;
+                });
+                setSelectedTagIds(new Set()); showToast("已删除选中标签", "success");
+            };
+
+            const updateTagText = (slotId, tagId, newText) => {
+                setSlots(prev => ({ ...prev, [slotId]: { ...prev[slotId], tags: prev[slotId].tags.map(t => t.id === tagId ? { ...t, en: newText, zh: '?' } : t) } }));
+            };
+
+            const handleTagClick = (tagId, e) => {
+                e.stopPropagation();
+                if (editingTagId === tagId) return;
+
+                if (e.ctrlKey || e.metaKey) {
+                    setSelectedTagIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(tagId)) next.delete(tagId);
+                        else next.add(tagId);
+                        return next;
+                    });
+                } else {
+                    if (selectedTagIds.has(tagId) && selectedTagIds.size === 1) {
+                        setEditingTagId(tagId);
+                    } else {
+                        setSelectedTagIds(new Set([tagId]));
+                    }
+                }
+            };
+
+            const handleTagDoubleClick = (tagId, e) => {
+                e.stopPropagation();
+                setEditingTagId(tagId);
+                setSelectedTagIds(new Set([tagId]));
+            };
+
+            const handleBackgroundClick = () => { setSelectedTagIds(new Set()); setEditingTagId(null); };
+            const finishEditing = (slotId, tagId, text) => { setEditingTagId(null); if (!text || text.trim() === '') removeTag(slotId, tagId); };
+
+            const toggleLock = (id) => setSlots(prev => ({...prev, [id]: { ...prev[id], locked: !prev[id].locked }}));
+            const toggleInclude = (id) => setSlots(prev => ({...prev, [id]: { ...prev[id], included: !prev[id].included }}));
+            const clearSlotTags = (id) => { if (slots[id].locked) return; setSlots(prev => ({...prev, [id]: { ...prev[id], tags: [] }})); showToast("已清空该栏", "success"); };
+            const copySlotContent = (slotId) => {
+                const slot = slots[slotId]; if (!slot || !slot.tags.length) { showToast("该栏为空，无需复制", "info"); return; }
+                const text = slot.tags.map(t => t.en).join(", ");
+                const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                setSlotCopyFeedback({ id: slotId }); showToast("已复制该栏内容", "success"); setTimeout(() => setSlotCopyFeedback(null), 1500);
+            };
+            const handleContainerClick = (slotId, e) => {
+                if (e.target.tagName === 'INPUT') return;
+                if (slotInputRefs.current[slotId]) slotInputRefs.current[slotId].focus();
+                if (!(e.ctrlKey || e.metaKey)) setSelectedTagIds(new Set());
+            };
+
+            const handleDragStart = (e, slotId, index) => { setDragData({ slotId, index }); e.dataTransfer.effectAllowed = "move"; };
+            const handleDragOverTag = (e, slotId, index) => {
+                e.preventDefault(); e.stopPropagation(); if (!dragData || dragData.slotId !== slotId) return;
+                const rect = e.currentTarget.getBoundingClientRect(); const midX = rect.left + rect.width / 2;
+                let targetIndex = index; if (e.clientX > midX) targetIndex = index + 1;
+                setDropTarget(prev => { if (prev && prev.slotId === slotId && prev.index === targetIndex) return prev; return { slotId, index: targetIndex }; });
+            };
+            const handleDragOverContainer = (e, slotId) => { e.preventDefault(); };
+            const handleDrop = (e) => {
+                e.preventDefault(); e.stopPropagation(); 
+                if (!dragData || !dropTarget || dragData.slotId !== dropTarget.slotId) { setDragData(null); setDropTarget(null); return; }
+                const slotId = dragData.slotId; const oldIndex = dragData.index; const newIndex = dropTarget.index; 
+                setDragData(null); setDropTarget(null);
+                if (oldIndex === newIndex || oldIndex === newIndex - 1) return;
+                setSlots(prev => {
+                    const slot = prev[slotId]; const newTags = [...slot.tags]; const [movedItem] = newTags.splice(oldIndex, 1);
+                    let insertAt = newIndex; if (oldIndex < newIndex) insertAt -= 1; 
+                    newTags.splice(insertAt, 0, movedItem); return { ...prev, [slotId]: { ...slot, tags: newTags } };
+                });
+            };
+
+            const copyAllPrompts = () => {
+                const text = SLOT_CONFIG
+                    .filter(c => slots[c.id]?.included)
+                    .map(c => slots[c.id]?.tags.map(t => t.en).join(", "))
+                    .filter(t => t && t.trim()).join(",\n");
+                
+                if (!text) {
+                     showToast("没有可复制的内容", "warning");
+                     return;
+                }
+
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                setShowCopyFeedback(true);
+                showToast("完整咒语已复制", "success");
+                setTimeout(() => setShowCopyFeedback(false), 2000);
+            };
+
+            const copySelectedTags = () => {
+                if (selectedTagIds.size === 0) return;
+                const selectedTexts = [];
+                SLOT_CONFIG.forEach(c => {
+                    const slot = slots[c.id];
+                    if (slot && slot.tags) {
+                        slot.tags.forEach(t => { if (selectedTagIds.has(t.id)) selectedTexts.push(t.en); });
+                    }
+                });
+                const text = selectedTexts.join(", ");
+                if (!text) return;
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast(`已复制 ${selectedTagIds.size} 个选中标签`, "success");
+            };
+            
+            const handleBottomButtonClick = () => { if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "warning"); return; } handleOneClickRoll(); };
+
+            // 搜索过滤函数
+            const getFilteredGroups = () => {
+                if (!viewingBook) return [];
+                if (!grimoireSearchQuery.trim()) return viewingBook.groups;
+
+                const lowerQuery = grimoireSearchQuery.toLowerCase();
+                
+                return viewingBook.groups.map(group => {
+                    // Safe access for group.categories just in case
+                    if (!group.categories) return null;
+
+                    const filteredCategories = group.categories.map(cat => {
+                        const catName = typeof cat.name === 'string' ? cat.name.toLowerCase() : '';
+                        const catNameMatch = catName.includes(lowerQuery);
+                        
+                        // Safe access for cat.tags
+                        const tags = Array.isArray(cat.tags) ? cat.tags : [];
+
+                        const filteredTags = tags.filter(tag => {
+                            const tagName = typeof tag.name === 'string' ? tag.name.toLowerCase() : '';
+                            const tagKeyword = typeof tag.keyword === 'string' ? tag.keyword.toLowerCase() : '';
+                            return tagName.includes(lowerQuery) || tagKeyword.includes(lowerQuery);
+                        });
+
+                        if (filteredTags.length > 0 || catNameMatch) {
+                            return { 
+                                ...cat, 
+                                tags: catNameMatch && filteredTags.length === 0 ? tags : filteredTags 
+                            };
+                        }
+                        return null;
+                    }).filter(Boolean);
+
+                    if (filteredCategories.length > 0) {
+                        return { ...group, categories: filteredCategories };
+                    }
+                    return null;
+                }).filter(Boolean);
+            };
+
+            const filteredGroups = getFilteredGroups();
+
+
+            // ================= 渲染 =================
+
+            return (
+                <div className="min-h-screen pb-24 relative overflow-x-hidden transition-all duration-300" onClick={handleBackgroundClick}>
+                    {/* Toast */}
+                    <div className="fixed top-20 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+                        {toasts.map(toast => {
+                            let bgClass, icon;
+                            switch(toast.type) {
+                                case 'success': bgClass = "bg-emerald-600/90 text-white border-emerald-500/50"; icon = <CheckCircle2 className="w-5 h-5" />; break;
+                                case 'error': bgClass = "bg-red-600/90 text-white border-red-500/50"; icon = <XCircle className="w-5 h-5" />; break;
+                                case 'warning': bgClass = "bg-amber-500/90 text-white border-amber-400/50"; icon = <AlertTriangle className="w-5 h-5" />; break;
+                                default: bgClass = "bg-slate-700/90 text-slate-200 border-slate-600/50"; icon = <Info className="w-5 h-5 text-blue-400" />;
+                            }
+                            return (
+                                <div key={toast.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl backdrop-blur-md animate-in slide-in-from-right-10 fade-in duration-300 max-w-sm ${bgClass}`}>
+                                    <div className="flex-shrink-0">{icon}</div><div className="text-sm font-medium whitespace-pre-wrap">{toast.message}</div>
+                                    <button onClick={() => removeToast(toast.id)} className="ml-auto opacity-70 hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Modal for Confirmation */}
+                    {confirmModal.show && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+                            <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-yellow-500" />{confirmModal.title}</h3>
+                                <p className="text-slate-400 mb-6 text-sm whitespace-pre-wrap">{confirmModal.message}</p>
+                                <div className="flex justify-end gap-3">
+                                    <button onClick={() => setConfirmModal({ ...confirmModal, show: false })} className="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors text-sm">取消</button>
+                                    <button onClick={confirmModal.onConfirm} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors text-sm">确认</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* === 新增：查看全部选中Tag Modal === */}
+                    {viewingFullSelectedTags && (
+                        <div className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
+                            <div className="w-full max-w-3xl max-h-[80vh] bg-slate-900 border border-pink-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-pink-500/20">
+                                    <h3 className="text-lg font-bold text-pink-400 flex items-center gap-2"><Sparkles className="w-5 h-5" /> 已选提示词 ({selectedGrimoireTags.size})</h3>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => copyToClipboard(Array.from(selectedGrimoireTags).join(", "))} 
+                                            className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" 
+                                            title="复制全部"
+                                        >
+                                            <Copy className="w-5 h-5" />
+                                        </button>
+                                        <button onClick={() => setViewingFullSelectedTags(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><X className="w-6 h-6" /></button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-950/50">
+                                    <div className="flex flex-wrap gap-2">
+                                        {Array.from(selectedGrimoireTags).map(tag => {
+                                            const tagInfo = findTagInfo(tag);
+                                            return (
+                                                <div key={tag} onClick={() => toggleGrimoireTag(tag)} className="group cursor-pointer px-3 py-1.5 bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 rounded text-sm border border-pink-500/20 hover:border-pink-500/40 flex flex-col items-center gap-1 transition-all min-w-[80px]">
+                                                    <div className="flex items-center gap-2 w-full justify-center">
+                                                        <span>{tag}</span>
+                                                        <X className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" />
+                                                    </div>
+                                                    {tagInfo && tagInfo.keyword && (
+                                                        <span className="text-[10px] text-pink-300/60 font-normal">{tagInfo.keyword}</span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                        {selectedGrimoireTags.size === 0 && <p className="text-slate-500 text-sm">暂无选中标签</p>}
+                                    </div>
+                                    {/* 手动添加 Tag 区域 (Modal内) */}
+                                    <div className="mt-6 pt-4 border-t border-slate-800">
+                                        <div className="text-xs text-slate-400 mb-2">手动添加 Tag:</div>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={customGrimoireTagInput}
+                                                onChange={(e) => setCustomGrimoireTagInput(e.target.value)}
+                                                onKeyDown={(e) => { if(e.key === 'Enter') addCustomGrimoireTag(); }}
+                                                placeholder="输入自定义提示词..." 
+                                                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-pink-500"
+                                            />
+                                            <button onClick={addCustomGrimoireTag} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm border border-slate-600"><Plus className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-end gap-3">
+                                    <button onClick={clearSelectedGrimoireTags} className="px-4 py-2 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors">全部清空</button>
+                                    <button onClick={() => setViewingFullSelectedTags(false)} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">关闭</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* === 新增：查看全部AI扩写内容 Modal (Larger) === */}
+                    {viewingFullExpansion && (
+                        <div className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
+                            <div className="w-full max-w-6xl h-[90vh] bg-slate-900 border border-violet-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-violet-500/20">
+                                    <h3 className="text-lg font-bold text-violet-400 flex items-center gap-2"><Wand2 className="w-5 h-5" /> AI 扩写结果</h3>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={handleTranslateExpansion} 
+                                            className="px-3 py-1.5 bg-violet-900/40 hover:bg-violet-900/60 text-violet-200 text-xs rounded-lg transition-colors border border-violet-500/30 flex items-center gap-1.5"
+                                        >
+                                            <Languages className="w-3.5 h-3.5" /> 翻译
+                                        </button>
+                                        <button 
+                                            onClick={() => copyToClipboard(grimoireExpansion)} 
+                                            className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" 
+                                            title="复制全部"
+                                        >
+                                            <Copy className="w-5 h-5" />
+                                        </button>
+                                        <button onClick={() => setViewingFullExpansion(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><X className="w-6 h-6" /></button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 p-0 bg-slate-950/50 flex flex-col">
+                                    <textarea 
+                                        value={grimoireExpansion}
+                                        onChange={(e) => setGrimoireExpansion(e.target.value)}
+                                        className="w-full h-full p-6 bg-transparent text-violet-200 text-base font-mono leading-relaxed focus:outline-none resize-none"
+                                        placeholder="AI 扩写内容..."
+                                    />
+                                </div>
+                                <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-end gap-3">
+                                    <button onClick={() => setGrimoireExpansion("")} className="px-4 py-2 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg text-sm transition-colors">清除内容</button>
+                                    <button onClick={() => { handleUseExpansion(); setViewingFullExpansion(false); }} className="px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">使用扩写词 <ArrowRight className="w-4 h-4" /></button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* === 新增：全屏文本编辑器 Modal === */}
+                    {viewingFullTextEditor && (
+                        <div className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
+                            <div className="w-full max-w-5xl h-[85vh] bg-slate-900 border border-blue-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800">
+                                    <h3 className="text-lg font-bold text-blue-400 flex items-center gap-2"><Edit3 className="w-5 h-5" /> 提示词全屏编辑</h3>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setGeneratedRawText('')} className="p-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors border border-red-500/20 mr-2" title="清空文本"><Trash2 className="w-5 h-5" /></button>
+                                        <button onClick={() => { setViewingFullTextEditor(false); handleParseAndFill(); }} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm transition-colors">分词并填入</button>
+                                        <button onClick={() => setViewingFullTextEditor(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><X className="w-6 h-6" /></button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 p-0 bg-slate-950/50 flex flex-col">
+                                    <textarea 
+                                        value={generatedRawText}
+                                        onChange={(e) => setGeneratedRawText(e.target.value)}
+                                        className="w-full h-full p-6 bg-slate-950 text-slate-200 text-base font-mono leading-relaxed focus:outline-none resize-none"
+                                        placeholder="在这里编辑您的 Prompt..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===================== 魔导书单分类聚焦窗口 (Grimoire Category Focus Modal) ===================== */}
+                    {expandedGrimoireCategory && (
+                        <div className="fixed inset-0 z-[130] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
+                            <div className="w-full max-w-4xl h-[80vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-pink-600/20 p-2 rounded-lg border border-pink-500/30">
+                                            <LayoutGrid className="w-6 h-6 text-pink-500" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white">{expandedGrimoireCategory.name}</h2>
+                                            <p className="text-xs text-slate-400">选择该分类下的标签</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setExpandedGrimoireCategory(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="关闭"><X className="w-6 h-6" /></button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-950/50">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                                        {expandedGrimoireCategory.tags.map((tag, tIndex) => {
+                                            const isSelected = selectedGrimoireTags.has(tag.name);
+                                            return (
+                                                <button 
+                                                    key={tIndex}
+                                                    onClick={() => toggleGrimoireTag(tag.name)}
+                                                    className={`relative px-3 py-2 rounded-lg border text-sm font-medium transition-all text-left flex items-start gap-2 hover:shadow-lg ${isSelected 
+                                                        ? "bg-pink-600 border-pink-500 text-white shadow-pink-900/20" 
+                                                        : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:bg-slate-700"}`}
+                                                >
+                                                    <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-white border-white" : "border-slate-500"}`}>
+                                                        {isSelected && <Check className="w-3 h-3 text-pink-600" />}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="truncate" title={tag.name}>{tag.name}</div>
+                                                        {tag.keyword && <div className="text-[10px] opacity-60 truncate" title={tag.keyword}>{tag.keyword}</div>}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-end">
+                                    <button onClick={() => setExpandedGrimoireCategory(null)} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">完成</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===================== 魔导书整组聚焦窗口 (Grimoire Group Focus Modal) ===================== */}
+                    {expandedGrimoireGroup && (
+                        <div className="fixed inset-0 z-[130] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
+                            <div className="w-full max-w-5xl h-[85vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-indigo-600/20 p-2 rounded-lg border border-indigo-500/30">
+                                            <Folder className="w-6 h-6 text-indigo-400" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white">{expandedGrimoireGroup.name}</h2>
+                                            <p className="text-xs text-slate-400">分组全屏浏览</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            onClick={() => {
+                                                const allScopes = new Set();
+                                                let allSelected = true;
+                                                expandedGrimoireGroup.categories.forEach((_, cIndex) => {
+                                                    if (!checkedGrimoireScopes.has(`${expandedGrimoireGroup.index}-${cIndex}`)) {
+                                                        allSelected = false;
+                                                    }
+                                                });
+
+                                                setCheckedGrimoireScopes(prev => {
+                                                    const next = new Set(prev);
+                                                    expandedGrimoireGroup.categories.forEach((_, cIndex) => {
+                                                        const scope = `${expandedGrimoireGroup.index}-${cIndex}`;
+                                                        if (allSelected) {
+                                                            next.delete(scope);
+                                                        } else {
+                                                            next.add(scope);
+                                                        }
+                                                    });
+                                                    return next;
+                                                });
+                                            }}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                                 expandedGrimoireGroup.categories.every((_, cIdx) => checkedGrimoireScopes.has(`${expandedGrimoireGroup.index}-${cIdx}`)) 
+                                                 ? "bg-pink-600 text-white" 
+                                                 : "bg-slate-800 hover:bg-slate-700"
+                                            }`}
+                                        >
+                                            {expandedGrimoireGroup.categories.every((_, cIdx) => checkedGrimoireScopes.has(`${expandedGrimoireGroup.index}-${cIdx}`)) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                            全选当前分组
+                                        </button>
+                                        <button onClick={() => setExpandedGrimoireGroup(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="关闭"><X className="w-6 h-6" /></button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-950/50">
+                                    {expandedGrimoireGroup.categories.map((category, cIndex) => {
+                                        const scopeId = `${expandedGrimoireGroup.index}-${cIndex}`;
+                                        const isChecked = checkedGrimoireScopes.has(scopeId);
+                                        return (
+                                            <div key={cIndex} className="mb-8">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <button 
+                                                        onClick={() => toggleGrimoireScope(scopeId)}
+                                                        className={`p-1 rounded transition-colors ${isChecked ? "text-indigo-400 hover:text-indigo-300" : "text-slate-600 hover:text-slate-400"}`}
+                                                        title={isChecked ? "取消勾选" : "勾选此分类以进行随机抽取"}
+                                                    >
+                                                        {isChecked ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                                                    </button>
+                                                    <h3 className="text-sm font-bold text-slate-400 pl-2 border-l-4 border-pink-500 flex items-center gap-2">
+                                                        {category.name}
+                                                        <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 font-normal">{category.tags.length}</span>
+                                                    </h3>
+                                                </div>
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 pl-2">
+                                                    {category.tags.map((tag, tIndex) => {
+                                                        const isSelected = selectedGrimoireTags.has(tag.name);
+                                                        return (
+                                                            <button 
+                                                                key={tIndex}
+                                                                onClick={() => toggleGrimoireTag(tag.name)}
+                                                                className={`relative p-2 rounded-lg border text-xs font-medium transition-all text-left flex items-start gap-2 hover:shadow-lg h-auto ${isSelected 
+                                                                    ? "bg-pink-600 border-pink-500 text-white shadow-pink-900/20" 
+                                                                    : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-slate-500 hover:bg-slate-800"}`}
+                                                            >
+                                                                <div className={`mt-0.5 w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-white border-white" : "border-slate-500"}`}>
+                                                                    {isSelected && <Check className="w-2.5 h-2.5 text-pink-600" />}
+                                                                </div>
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="break-all leading-tight font-mono">{tag.name}</span>
+                                                                    {tag.keyword && <span className={`text-[10px] mt-0.5 leading-tight ${isSelected ? "text-pink-100 opacity-80" : "text-slate-500"}`}>{tag.keyword}</span>}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-end">
+                                    <button onClick={() => setExpandedGrimoireGroup(null)} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">完成</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===================== 全屏展开编辑模式 (Expanded Slot Modal) ===================== */}
+                    {expandedSlotId && slots[expandedSlotId] && (
+                        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
+                            <div className="w-full max-w-5xl h-[85vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                                {/* Modal Header */}
+                                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-indigo-600/20 p-2 rounded-lg border border-indigo-500/30">
+                                            {(() => {
+                                                const Config = SLOT_CONFIG.find(c => c.id === expandedSlotId);
+                                                const Icon = Config ? Config.icon : Sparkles;
+                                                return <Icon className="w-6 h-6 text-indigo-400" />;
+                                            })()}
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white">
+                                                {SLOT_CONFIG.find(c => c.id === expandedSlotId)?.label || "编辑内容"}
+                                            </h2>
+                                            <p className="text-xs text-slate-400">聚焦模式 - 全屏编辑</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => copySlotContent(expandedSlotId)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="复制全部"><Copy className="w-5 h-5" /></button>
+                                        <button onClick={() => setExpandedSlotId(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="关闭 (Esc)"><X className="w-6 h-6" /></button>
+                                    </div>
+                                </div>
+
+                                {/* Modal Body - Split View */}
+                                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                                    {/* Left: Tags Editor (English + Add) */}
+                                    <div className="flex-1 flex flex-col border-r border-slate-800 min-w-0">
+                                        <div className="p-3 bg-slate-900/50 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                                            <span>Tags (Drag & Drop)</span>
+                                            <span className="text-[10px] bg-slate-800 px-1.5 rounded">{slots[expandedSlotId].tags.length} ITEMS</span>
+                                        </div>
+                                        <div 
+                                            className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-slate-900/30"
+                                            onClick={(e) => handleContainerClick(expandedSlotId, e)}
+                                        >
+                                            <div className="flex flex-wrap gap-2">
+                                                {slots[expandedSlotId].tags.map((tag, index) => {
+                                                    const isSelected = selectedTagIds.has(tag.id);
+                                                    return (
+                                                        <React.Fragment key={tag.id}>
+                                                            {dropTarget && dropTarget.slotId === expandedSlotId && dropTarget.index === index && (<div className="w-1 h-8 bg-pink-500 rounded-full mx-1 animate-pulse" />)}
+                                                            <div 
+                                                                draggable 
+                                                                onDragStart={(e) => handleDragStart(e, expandedSlotId, index)} 
+                                                                onDragOver={(e) => handleDragOverTag(e, expandedSlotId, index)} 
+                                                                onDrop={handleDrop}
+                                                                onClick={(e) => handleTagClick(tag.id, e)} 
+                                                                onDoubleClick={(e) => handleTagDoubleClick(tag.id, e)}
+                                                                className={`group/tag relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono border transition-all select-none cursor-pointer ${editingTagId === tag.id ? "bg-slate-950 border-violet-500 ring-2 ring-violet-500/50" : isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-lg scale-105" : hoveredTagId === tag.id ? "bg-slate-800 border-slate-500 text-slate-200" : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-slate-600"}`}
+                                                                onMouseEnter={() => setHoveredTagId(tag.id)} 
+                                                                onMouseLeave={() => setHoveredTagId(null)}
+                                                            >
+                                                                <GripVertical className={`w-3 h-3 opacity-30 group-hover/tag:opacity-100 cursor-grab ${isSelected ? 'text-indigo-300' : 'text-slate-500'}`} />
+                                                                {editingTagId === tag.id ? (
+                                                                    <input autoFocus type="text" value={tag.en} onChange={(e) => updateTagText(expandedSlotId, tag.id, e.target.value)} onBlur={(e) => finishEditing(expandedSlotId, tag.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') finishEditing(expandedSlotId, tag.id, e.currentTarget.value); }} className="bg-transparent text-white border-none p-0 min-w-[60px] outline-none" />
+                                                                ) : (
+                                                                    <span>{tag.en}</span>
+                                                                )}
+                                                                <button onClick={(e) => { e.stopPropagation(); removeTag(expandedSlotId, tag.id); }} className={`ml-1 opacity-0 group-hover/tag:opacity-100 hover:text-red-400 transition-opacity p-0.5 rounded ${isSelected ? "text-indigo-200" : "text-slate-500"}`}><X className="w-3 h-3" /></button>
+                                                            </div>
+                                                        </React.Fragment>
+                                                    );
+                                                })}
+                                                {dropTarget && dropTarget.slotId === expandedSlotId && dropTarget.index === slots[expandedSlotId].tags.length && (<div className="w-1 h-8 bg-pink-500 rounded-full mx-1 animate-pulse" />)}
+                                                
+                                                <div className="relative flex items-center min-w-[100px] max-w-[200px]">
+                                                    <Plus className="w-4 h-4 text-slate-600 absolute left-2 pointer-events-none" />
+                                                    <input 
+                                                        ref={el => slotInputRefs.current[expandedSlotId] = el}
+                                                        type="text" 
+                                                        placeholder="Add tag..." 
+                                                        className="w-full bg-slate-800/30 border border-transparent hover:border-slate-700 focus:border-indigo-500 focus:bg-slate-900 rounded-lg py-2 pl-8 text-sm text-slate-200 placeholder:text-slate-600 focus:ring-0 transition-all"
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') { addTag(expandedSlotId, e.target.value); e.target.value = ''; } }} 
+                                                        onBlur={(e) => { addTag(expandedSlotId, e.target.value); e.target.value = ''; }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Translation & Weights */}
+                                    <div className="flex-1 flex flex-col min-w-0 bg-slate-950/30">
+                                        <div className="p-3 bg-slate-900/50 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                            Translation & Weight
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {slots[expandedSlotId].tags.map((tag) => {
+                                                    const isSelected = selectedTagIds.has(tag.id);
+                                                    return (
+                                                        <div 
+                                                            key={tag.id + '_zh_exp'} 
+                                                            onClick={(e) => handleTagClick(tag.id, e)}
+                                                            className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${isSelected ? "bg-indigo-900/30 border-indigo-500/50" : hoveredTagId === tag.id ? "bg-slate-800 border-slate-600" : "bg-slate-900/50 border-slate-800 hover:border-slate-700"}`}
+                                                            onMouseEnter={() => setHoveredTagId(tag.id)} 
+                                                            onMouseLeave={() => setHoveredTagId(null)}
+                                                        >
+                                                            <div className="flex flex-col min-w-0">
+                                                                <span className="text-xs text-slate-400 font-mono truncate mb-0.5">{tag.en}</span>
+                                                                <span className={`text-sm font-medium truncate ${tag.zh === '?' ? "text-slate-600" : "text-slate-300"}`}>{tag.zh === '?' ? "未翻译" : tag.zh}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 bg-slate-950 rounded border border-slate-800 p-0.5">
+                                                                <button onClick={(e) => { e.stopPropagation(); adjustTagWeight(expandedSlotId, tag.id, -0.1); }} className="p-1 hover:bg-slate-800 hover:text-red-400 rounded text-slate-500"><Minus className="w-3 h-3" /></button>
+                                                                <div className="w-px h-3 bg-slate-800"></div>
+                                                                <button onClick={(e) => { e.stopPropagation(); adjustTagWeight(expandedSlotId, tag.id, 0.1); }} className="p-1 hover:bg-slate-800 hover:text-emerald-400 rounded text-slate-500"><Plus className="w-3 h-3" /></button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===================== 全屏魔导书大窗口 (Grimoire Reader Modal) ===================== */}
+                    {viewingBook && (
+                        <div className="fixed inset-0 z-[80] flex flex-col bg-slate-950 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800 shadow-md">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-pink-600/20 p-2 rounded-lg border border-pink-500/30">
+                                        <BookOpen className="w-6 h-6 text-pink-500" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">{viewingBook.name}</h2>
+                                        <p className="text-xs text-slate-400">{viewingBook.description || "无描述"}</p>
+                                    </div>
+                                </div>
+                                <div className="flex-1 max-w-md mx-4">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                                        <input 
+                                            type="text" 
+                                            value={grimoireSearchQuery}
+                                            onChange={(e) => setGrimoireSearchQuery(e.target.value)}
+                                            placeholder="搜索魔导书 (支持中文/英文)..." 
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm text-slate-200 focus:outline-none focus:border-pink-500 transition-colors"
+                                        />
+                                        {grimoireSearchQuery && (
+                                            <button onClick={() => setGrimoireSearchQuery("")} className="absolute right-3 top-2.5 text-slate-500 hover:text-white">
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={handleRandomRollPerGroup}
+                                        className="hidden md:flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-indigo-900/20"
+                                        title="从勾选的每个分类中随机抽取一个标签"
+                                    >
+                                        <Dices className="w-4 h-4" /> 大组勾选随机抽取
+                                    </button>
+                                    <button 
+                                        onClick={handleSelectAllGroups}
+                                        className={`hidden md:flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${
+                                            getTotalScopesCount(viewingBook) > 0 && checkedGrimoireScopes.size === getTotalScopesCount(viewingBook)
+                                            ? "bg-pink-600 border-pink-600 text-white hover:bg-pink-500"
+                                            : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                                        }`}
+                                        title="全选所有分组"
+                                    >
+                                        {getTotalScopesCount(viewingBook) > 0 && checkedGrimoireScopes.size === getTotalScopesCount(viewingBook) 
+                                            ? <CheckSquare className="w-4 h-4" /> 
+                                            : <Square className="w-4 h-4" />
+                                        } 
+                                        全部勾选
+                                    </button>
+                                    <button onClick={() => setViewingBook(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="关闭"><X className="w-6 h-6" /></button>
+                                </div>
+                            </div>
+
+                            {/* Main Content Area - Grid Layout */}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-950">
+                                {filteredGroups.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+                                        <Search className="w-12 h-12 mb-4 opacity-20" />
+                                        <p>没有找到相关内容</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-w-7xl mx-auto">
+                                        {filteredGroups.map((group, gIndex) => {
+                                            const groupAllSelected = group.categories.every((_, cIdx) => checkedGrimoireScopes.has(`${gIndex}-${cIdx}`));
+                                            return (
+                                                <div key={gIndex} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-lg hover:shadow-slate-900/50 transition-shadow">
+                                                    {/* Group Header */}
+                                                    <div className="flex items-center justify-between px-4 py-3 bg-slate-800/80 border-b border-slate-700">
+                                                        <span className="font-bold text-slate-200">{group.name}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <button 
+                                                                onClick={() => setExpandedGrimoireGroup({ ...group, index: gIndex })}
+                                                                className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors" 
+                                                                title="全屏浏览该分组"
+                                                            >
+                                                                <Maximize2 className="w-4 h-4" />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => toggleGrimoireGroup(gIndex)}
+                                                                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${groupAllSelected ? "bg-pink-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}
+                                                                title={groupAllSelected ? "取消全选" : "全选该组"}
+                                                            >
+                                                                {groupAllSelected ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />} 全选
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Categories List */}
+                                                    <div className="p-3 space-y-3 flex-1 overflow-y-auto max-h-[400px] custom-scrollbar">
+                                                        {group.categories.map((category, cIndex) => {
+                                                            const scopeId = `${gIndex}-${cIndex}`;
+                                                            const isChecked = checkedGrimoireScopes.has(scopeId);
+                                                            return (
+                                                                <div key={cIndex} className={`rounded-lg border p-2 transition-all ${isChecked ? "bg-slate-800/80 border-indigo-500/50" : "bg-slate-900/50 border-slate-800"}`}>
+                                                                    <div className="flex items-center justify-between mb-2">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <button onClick={() => toggleGrimoireScope(scopeId)} className={`text-slate-400 hover:text-white transition-colors`} title="勾选此分类">
+                                                                                {isChecked ? <CheckSquare className="w-4 h-4 text-indigo-400" /> : <Square className="w-4 h-4" />}
+                                                                            </button>
+                                                                            <span className={`text-sm font-medium ${isChecked ? "text-indigo-300" : "text-slate-400"}`} onClick={() => setExpandedGrimoireCategory({ ...category, groupIndex: gIndex, categoryIndex: cIndex })} title="点击展开查看所有">{category.name}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">{category.tags.length}</span>
+                                                                            <button onClick={() => setExpandedGrimoireCategory({ ...category, groupIndex: gIndex, categoryIndex: cIndex })} className="p-1 hover:bg-slate-700 rounded text-slate-500 hover:text-white transition-colors" title="放大查看所有"><Maximize2 className="w-3 h-3" /></button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1 pl-6 cursor-pointer" onClick={() => setExpandedGrimoireCategory({ ...category, groupIndex: gIndex, categoryIndex: cIndex })}>
+                                                                        {category.tags.slice(0, 8).map((tag, tIndex) => (
+                                                                            <span 
+                                                                                key={tIndex}
+                                                                                className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors truncate max-w-[100px] pointer-events-none ${selectedGrimoireTags.has(tag.name) ? "bg-pink-600 border-pink-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400"}`}
+                                                                            >
+                                                                                {tag.name}
+                                                                            </span>
+                                                                        ))}
+                                                                        {category.tags.length > 8 && <span className="text-[10px] text-slate-600 px-1">...</span>}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer / Control Bar (Same as before but with added inputs if needed, though they are in sidebar too) */}
+                            <div className="bg-slate-900 border-t border-slate-800 p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.3)]">
+                                <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-between">
+                                    {/* Selected Tags Display */}
+                                    <div className="flex-1 w-full md:w-auto">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <div className="text-xs text-slate-500">已选择 Tags ({selectedGrimoireTags.size})</div>
+                                            <div className="flex gap-2">
+                                                 <button 
+                                                     onClick={() => copyToClipboard(Array.from(selectedGrimoireTags).join(", "))} 
+                                                     className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-slate-300 transition-colors flex items-center gap-1"
+                                                     title="复制全部"
+                                                 >
+                                                     <Copy className="w-3 h-3" />复制
+                                                 </button>
+                                                 <button onClick={() => setViewingFullSelectedTags(true)} className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-slate-300 transition-colors flex items-center gap-1"><Maximize2 className="w-3 h-3" />放大</button>
+                                                 <button onClick={clearSelectedGrimoireTags} className="text-[10px] text-red-400 hover:text-red-300 transition-colors">清空</button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex flex-col gap-2 bg-slate-950 border border-slate-800 rounded-lg p-2 min-h-[60px]">
+                                            <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto custom-scrollbar">
+                                                {Array.from(selectedGrimoireTags).map(tag => (
+                                                    <span key={tag} onClick={() => toggleGrimoireTag(tag)} className="group cursor-pointer px-2 py-1 bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 rounded text-[10px] border border-pink-500/20 hover:border-pink-500/40 flex items-center gap-1">
+                                                        {tag} <X className="w-2.5 h-2.5 opacity-50 group-hover:opacity-100" />
+                                                    </span>
+                                                ))}
+                                                {selectedGrimoireTags.size === 0 && <span className="text-xs text-slate-600 italic">点击标签或使用随机抽取功能...</span>}
+                                            </div>
+                                            {/* Quick Add Input inside Modal Footer */}
+                                            <div className="flex gap-2 mt-1">
+                                                <input 
+                                                    type="text" 
+                                                    value={customGrimoireTagInput}
+                                                    onChange={(e) => setCustomGrimoireTagInput(e.target.value)}
+                                                    onKeyDown={(e) => { if(e.key === 'Enter') addCustomGrimoireTag(); }}
+                                                    placeholder="手动添加..." 
+                                                    className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:border-pink-500 focus:outline-none"
+                                                />
+                                                <button onClick={addCustomGrimoireTag} className="px-2 bg-slate-800 border border-slate-700 rounded text-slate-400 hover:text-white hover:border-slate-500"><Plus className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-3 w-full md:w-auto shrink-0 self-end">
+                                        <button 
+                                            onClick={() => { setViewingBook(null); setIsSidebarOpen(true); setActiveSidebarTab('grimoire'); }}
+                                            className="px-5 py-2.5 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-pink-900/20"
+                                        >
+                                            <Check className="w-4 h-4" /> 确认并返回
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Sidebar */}
+                    <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l border-slate-800 z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={e => e.stopPropagation()}>
+                        <div className="flex border-b border-slate-800 bg-slate-950">
+                            {[
+                                { id: 'generate', label: '生成', icon: Sparkles },
+                                { id: 'grimoire', label: '魔导书', icon: BookOpen }, 
+                                { id: 'tools', label: '工具', icon: Wrench },
+                                { id: 'presets', label: '预设', icon: Bookmark },
+                                { id: 'history', label: '历史', icon: History },
+                                { id: 'settings', label: '设置', icon: Settings }
+                            ].map(tab => (
+                                <button 
+                                    key={tab.id} 
+                                    onClick={() => setActiveSidebarTab(tab.id)} 
+                                    className={`group relative flex-1 p-3 flex justify-center items-center gap-2 text-sm font-medium transition-colors ${activeSidebarTab === tab.id ? 'text-pink-500 border-b-2 border-pink-500 bg-slate-900' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/50'}`}
+                                    title={tab.label}
+                                >
+                                    <tab.icon className="w-4 h-4" />
+                                </button>
+                            ))}
+                            <button onClick={() => setIsSidebarOpen(false)} className="p-3 text-slate-600 hover:text-white hover:bg-red-500/20 transition-colors" title="关闭侧边栏"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-900 p-4">
+                            {/* ... Sidebar Contents (Kept concise) ... */}
+                            {activeSidebarTab === 'generate' && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200">
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                                        <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Sparkles className="w-4 h-4" /> AI 抽卡配置</h3>
+                                        <div className="mb-4"><label className="block text-xs text-slate-400 mb-1">主题 (可选)</label><input type="text" value={themeInput} onChange={(e) => setThemeInput(e.target.value)} placeholder="例: 赛博朋克, 森林精灵 (留空随机)" className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-pink-500 focus:outline-none" /></div>
+                                        <div className="mb-4"><label className="block text-xs text-slate-400 mb-1">风格模式</label><div className="grid grid-cols-2 gap-2"><button onClick={() => setGenerationMode('simple')} className={`py-2 rounded-lg text-xs font-medium transition-all ${generationMode === 'simple' ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}><Zap className="w-3 h-3 inline mr-1" /> 精略版</button><button onClick={() => setGenerationMode('detailed')} className={`py-2 rounded-lg text-xs font-medium transition-all ${generationMode === 'detailed' ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}><Sparkles className="w-3 h-3 inline mr-1" /> 详细版</button></div></div>
+                                        <div className="mb-4">
+                                            <button onClick={() => setShowPromptSettings(!showPromptSettings)} className="w-full flex items-center justify-between text-xs text-slate-400 hover:text-slate-200 bg-slate-800/50 hover:bg-slate-800 rounded-lg px-3 py-2 transition-colors mb-2"><div className="flex items-center gap-2"><PenLine className="w-3.5 h-3.5" /><span>高级：提示词模版配置</span></div><ChevronRight className={`w-3.5 h-3.5 transition-transform ${showPromptSettings ? 'rotate-90' : ''}`} /></button>
+                                            {showPromptSettings && (<div className="space-y-3 bg-slate-950/50 rounded-lg p-3 border border-slate-800 animate-in slide-in-from-top-2 duration-200"><div className="text-[10px] text-slate-500 mb-1">定义 AI 的角色和行为。</div><textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} className="w-full h-32 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none font-mono" /><div className="flex gap-2"><div className="flex-1 flex gap-2"><input type="text" value={newPromptPresetName} onChange={(e) => setNewPromptPresetName(e.target.value)} placeholder="新方案名称..." className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none" /><button onClick={savePromptPreset} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs"><Save className="w-3.5 h-3.5" /></button></div><button onClick={restoreDefaultPrompt} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg text-xs" title="恢复默认"><RotateCcw className="w-3.5 h-3.5" /></button></div>{promptPresets.length > 0 && (<div className="pt-2 border-t border-slate-800"><div className="text-[10px] text-slate-500 mb-2">已保存方案:</div><div className="flex flex-wrap gap-2">{promptPresets.map(p => (<div key={p.id} className="group flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-300"><span onClick={() => loadPromptPreset(p)} className="cursor-pointer hover:text-white">{p.name}</span><button onClick={() => deletePromptPreset(p.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3" /></button></div>))}</div></div>)}</div>)}
+                                        </div>
+                                        <button onClick={handleGenerateText} disabled={isRolling} className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-all disabled:opacity-50 mb-3">Step 1: 生成文本</button>
+                                        <div className="relative mb-3">
+                                            <div className="absolute right-2 top-2 z-10 flex gap-1">
+                                                <button onClick={() => setGeneratedRawText('')} className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-slate-600/50" title="清空文本"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => setViewingFullTextEditor(true)} className="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-600/50" title="全屏编辑"><Maximize2 className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                            <textarea value={generatedRawText} onChange={(e) => setGeneratedRawText(e.target.value)} placeholder="AI 生成的原始文本将显示在这里..." className="w-full h-32 bg-slate-950 border border-slate-700 rounded-lg p-2 pr-16 text-xs text-slate-300 focus:border-blue-500 focus:outline-none resize-none" />
+                                        </div>
+                                        <button onClick={() => handleParseAndFill()} disabled={isRolling} className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all disabled:opacity-50">Step 2: 分词并填入 (+自动翻译)</button>
+                                    </div>
+                                    <div className="relative flex items-center py-2"><div className="flex-grow border-t border-slate-700"></div><span className="flex-shrink-0 mx-4 text-slate-500 text-xs">或者直接</span><div className="flex-grow border-t border-slate-700"></div></div>
+                                    <button onClick={handleOneClickRoll} disabled={isRolling} className="w-full group relative overflow-hidden rounded-xl p-4 transition-all shadow-lg hover:shadow-pink-500/20"><div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500 opacity-90 group-hover:opacity-100 transition-opacity"></div><div className="relative flex items-center justify-center gap-2 text-white font-bold text-lg">{isRolling ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-white" />}一键 AI 抽卡</div></button>
+                                </div>
+                            )}
+
+                            {activeSidebarTab === 'grimoire' && (
+                                <div className="flex flex-col h-full relative">
+                                    {/* Top: Header / Import */}
+                                    <div className="flex gap-2 p-4 pb-2 shrink-0">
+                                        <div className="flex-1 flex items-center gap-2 text-slate-300 text-xs bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg">
+                                            <BookOpen className="w-4 h-4 text-pink-500" />
+                                            <span className="font-bold">魔导书库 ({grimoireBooks.length})</span>
+                                        </div>
+                                        <button onClick={triggerImportGrimoire} className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700" title="导入 JSON"><Upload className="w-4 h-4" /></button>
+                                        <input type="file" ref={grimoireFileInputRef} onChange={handleImportGrimoireFile} accept=".json" className="hidden" />
+                                    </div>
+
+                                    {/* Middle: Scrollable Book List */}
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-2 space-y-3">
+                                        {grimoireBooks.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-48 text-slate-600 gap-3 border-2 border-dashed border-slate-800 rounded-xl">
+                                                <BookOpen className="w-8 h-8 opacity-30" />
+                                                <span className="text-xs">暂无魔导书，请点击右上角导入</span>
+                                            </div>
+                                        ) : (
+                                            grimoireBooks.map(book => (
+                                                <div 
+                                                    key={book.id} 
+                                                    className="group relative bg-slate-800 border border-slate-700 rounded-xl p-3 hover:border-pink-500/50 hover:shadow-lg hover:shadow-pink-500/10 transition-all cursor-pointer"
+                                                    onClick={() => openGrimoireBook(book)}
+                                                >
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-inner">
+                                                                <span className="text-white text-xs font-bold">{book.name.charAt(0)}</span>
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="text-sm font-bold text-slate-200 line-clamp-1">{book.name}</h4>
+                                                                <p className="text-[10px] text-slate-500 line-clamp-1">{book.description || "自定义魔导书"}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={(e) => deleteGrimoireBook(book.id, e)}
+                                                            className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-slate-900 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                                            title="删除此书"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-[10px] text-slate-500 bg-slate-900/50 p-2 rounded-lg">
+                                                        <div className="flex items-center gap-1"><Folder className="w-3 h-3" /> {book.groups.length} 分组</div>
+                                                        <div className="w-px h-3 bg-slate-700"></div>
+                                                        <div className="flex items-center gap-1"><LayoutGrid className="w-3 h-3" /> {book.groups.reduce((acc, g) => acc + g.categories.length, 0)} 分类</div>
+                                                    </div>
+                                                    <div className="absolute right-3 bottom-3 text-pink-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs flex items-center gap-1 font-medium">
+                                                        打开 <ArrowRight className="w-3 h-3" />
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    {/* Bottom Panel (Fixed/Sticky behavior) */}
+                                    <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-4 space-y-3 shadow-[0_-4px_20px_rgba(0,0,0,0.5)] z-10">
+                                        
+                                        {/* 1. Selected Tags Display (Improved UI) */}
+                                        {selectedGrimoireTags.size > 0 && (
+                                            <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                                <div className="flex justify-between items-center mb-1.5">
+                                                    <span className="text-xs font-bold text-pink-400 flex items-center gap-1">
+                                                        <Sparkles className="w-3 h-3" /> 已选提示词 ({selectedGrimoireTags.size})
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => copyToClipboard(Array.from(selectedGrimoireTags).join(", "))} 
+                                                            className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-slate-300 transition-colors flex items-center gap-1"
+                                                            title="复制全部"
+                                                        >
+                                                            <Copy className="w-3 h-3" />
+                                                        </button>
+                                                        <button onClick={() => setViewingFullSelectedTags(true)} className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-slate-300 transition-colors flex items-center gap-1"><Maximize2 className="w-3 h-3" />放大</button>
+                                                        <button onClick={clearSelectedGrimoireTags} className="text-[10px] text-red-400 hover:text-red-300 transition-colors">清空</button>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-950/50 p-2 rounded-lg border border-pink-500/20 max-h-24 overflow-y-auto custom-scrollbar">
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {Array.from(selectedGrimoireTags).map(tag => (
+                                                            <span key={tag} onClick={() => toggleGrimoireTag(tag)} className="group cursor-pointer px-2 py-1 bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 rounded text-[10px] border border-pink-500/20 hover:border-pink-500/40 flex items-center gap-1 transition-all">
+                                                                {tag} <X className="w-2.5 h-2.5 opacity-50 group-hover:opacity-100" />
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 2. AI Expansion Display (New Requirement) */}
+                                        {grimoireExpansion && (
+                                            <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                                <div className="flex justify-between items-center mb-1.5">
+                                                    <span className="text-xs font-bold text-violet-400 flex items-center gap-1">
+                                                        <Wand2 className="w-3 h-3" /> AI 扩写结果
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => copyToClipboard(grimoireExpansion)} 
+                                                            className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-slate-300 transition-colors flex items-center gap-1"
+                                                            title="复制全部"
+                                                        >
+                                                            <Copy className="w-3 h-3" />
+                                                        </button>
+                                                        <button onClick={() => setViewingFullExpansion(true)} className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-slate-300 transition-colors flex items-center gap-1"><Maximize2 className="w-3 h-3" />放大</button>
+                                                        <button onClick={() => setGrimoireExpansion("")} className="text-[10px] text-slate-500 hover:text-slate-300">清除</button>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-violet-900/10 p-2 rounded-lg border border-violet-500/20 text-[10px] text-violet-200 max-h-20 overflow-y-auto custom-scrollbar font-mono leading-relaxed">
+                                                    {grimoireExpansion}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 3. Action Buttons */}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button 
+                                                onClick={handleExpandGrimoire} 
+                                                disabled={isExpandingGrimoire || selectedGrimoireTags.size === 0} 
+                                                className="col-span-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50 transition-colors border border-slate-700"
+                                                title="使用 AI 扩写当前选中的 Tag"
+                                            >
+                                                {isExpandingGrimoire ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />} 
+                                                AI 扩写
+                                            </button>
+                                            
+                                            {/* Send Expansion Button (Conditional Logic Updated) */}
+                                            <button 
+                                                onClick={() => handleUseExpansion()} 
+                                                disabled={selectedGrimoireTags.size === 0 && !grimoireExpansion}
+                                                className={`col-span-1 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
+                                                    grimoireExpansion 
+                                                    ? "bg-violet-600 hover:bg-violet-500 text-white" 
+                                                    : "bg-pink-600 hover:bg-pink-500 text-white disabled:bg-slate-800 disabled:text-slate-500"
+                                                }`}
+                                                title="将当前内容填入生成器的文本框"
+                                            >
+                                                {grimoireExpansion ? "使用扩写词" : "使用勾选词"} <ArrowRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+
+                                        {/* 4. Bottom Main Action: Send Selection & Parse (New Requirement) */}
+                                        <button 
+                                            onClick={() => handleSendSelectionToParse()} 
+                                            disabled={selectedGrimoireTags.size === 0 && !grimoireExpansion}
+                                            className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title="直接分词并填入槽位，开始准备抽卡"
+                                        >
+                                            <BrainCircuit className="w-4 h-4" /> 
+                                            分词并填入 (+自动翻译)
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeSidebarTab === 'tools' && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200">
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Lock className="w-4 h-4" /> 锁定控制</h3><div className="grid grid-cols-2 gap-2"><button onClick={batchLockAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition-colors" title="锁定所有槽位"><Shield className="w-3.5 h-3.5" /> 一键全锁</button><button onClick={batchUnlockAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition-colors" title="解锁所有槽位"><ShieldOff className="w-3.5 h-3.5" /> 一键解锁</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><CheckSquare className="w-4 h-4" /> 勾选控制</h3><div className="grid grid-cols-2 gap-2"><button onClick={batchIncludeAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-emerald-600 text-slate-200 hover:text-white text-xs transition-colors" title="勾选所有槽位"><CheckCircle2 className="w-3.5 h-3.5" /> 一键全勾选</button><button onClick={batchExcludeAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-red-500 text-slate-200 hover:text-white text-xs transition-colors" title="取消勾选所有槽位"><XCircle className="w-3.5 h-3.5" /> 一键全取消</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Scale className="w-4 h-4" /> 权重与内容</h3><div className="space-y-2"><button onClick={batchClearWeights} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-700 hover:bg-indigo-600 text-slate-200 hover:text-white text-xs transition-all" title="将所有权值重置为 1.0"><Scale className="w-3.5 h-3.5" /> 一键清除权重 (1.x)</button><button onClick={batchClearAllContent} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20 text-xs transition-all" title="清空所有未锁定槽位的内容"><Eraser className="w-3.5 h-3.5" /> 一键清空内容 (保留锁定)</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><div className="flex justify-between items-center mb-3"><h3 className="text-sm font-bold text-slate-300 flex items-center gap-2"><ClipboardPaste className="w-4 h-4" /> 智能剪贴板解析</h3><button onClick={() => setSmartPasteContent("")} className="text-slate-500 hover:text-red-400 p-1 hover:bg-slate-700/50 rounded transition-colors" title="清空文本"><Trash2 className="w-3.5 h-3.5" /></button></div><div className="space-y-3"><textarea value={smartPasteContent} onChange={(e) => setSmartPasteContent(e.target.value)} placeholder="在此粘贴 Civitai 等网站的完整咒语 (tags)..." className="w-full h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none" /><button onClick={handleSmartPaste} disabled={isSmartParsing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed" title="自动识别粘贴内容并填入对应槽位">{isSmartParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BrainCircuit className="w-3.5 h-3.5" />}{isSmartParsing ? "正在解析..." : "智能解析并填入"}</button></div></div>
+                                </div>
+                            )}
+                            {activeSidebarTab === 'settings' && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200">
+                                    <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-xl p-4 mb-4 text-center">
+                                        <div className="text-xs text-indigo-300 font-medium mb-1">Developed by</div>
+                                        <div className="text-lg font-bold text-white tracking-wide">逐辰十七</div>
+                                    </div>
+                                    <a 
+                                        href="https://github.com/caozhaofeng/AITagGacha" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-between p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 rounded-xl transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <Github className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
+                                            <span className="text-sm font-medium text-slate-300 group-hover:text-white">项目主页 (GitHub)</span>
+                                        </div>
+                                        <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-slate-400" />
+                                    </a>
+                                    <div className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">DeepSeek API Key</label><div className="relative"><KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" /><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} onBlur={handleSaveSettings} className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all text-slate-200 placeholder:text-slate-600" placeholder="sk-..." /></div></div><div><label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">API Base URL</label><input type="text" value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} onBlur={handleSaveSettings} className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-4 text-sm focus:outline-none focus:border-pink-500 transition-all text-slate-200 placeholder:text-slate-600" placeholder="https://api.deepseek.com" /></div></div>
+                                </div>
+                            )}
+                            {activeSidebarTab === 'presets' && (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                                    <div className="space-y-2"><div className="flex gap-2"><input type="text" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} placeholder="新预设名称..." className={`flex-1 bg-slate-950 border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none transition-all ${presetNameError ? 'border-red-500 animate-shake' : 'border-slate-700 focus:border-emerald-500'}`} /><button onClick={savePreset} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shadow-lg shadow-emerald-900/20" title="保存当前所有槽位状态为预设">保存</button></div><div className="flex gap-2"><button onClick={exportPresets} className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg py-2 text-xs text-slate-300 transition-colors" title="导出预设为 JSON 文件"><Download className="w-3.5 h-3.5" /> 导出备份</button><button onClick={triggerImport} className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg py-2 text-xs text-slate-300 transition-colors" title="从 JSON 文件导入预设"><Upload className="w-3.5 h-3.5" /> 导入</button><input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".json" className="hidden" /></div></div>
+                                    <div className="space-y-2 pt-2">{presets.length === 0 && (<div className="flex flex-col items-center justify-center py-12 text-slate-600 gap-3 border-2 border-dashed border-slate-800 rounded-xl"><FileJson className="w-10 h-10 opacity-30" /><span className="text-sm">暂无保存的预设</span></div>)}{presets.map(preset => (<div key={preset.id} className="group relative p-3 rounded-xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800 hover:border-slate-600 transition-all flex justify-between items-center cursor-pointer" onClick={() => loadPreset(preset)}><div className="flex-1 min-w-0 pr-3"><div className="font-bold text-slate-200 mb-1 truncate text-sm">{preset.name}</div><div className="text-[10px] text-slate-500 flex items-center gap-2"><span>{new Date(preset.id).toLocaleDateString()}</span><span className="w-1 h-1 bg-slate-600 rounded-full"></span><span className="text-emerald-500/80">{Object.values(preset.slots).reduce((acc, s) => acc + s.tags.length, 0)} 词</span></div></div><button onClick={(e) => deletePreset(preset.id, e)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="删除"><Trash2 className="w-4 h-4" /></button></div>))}</div>
+                                </div>
+                            )}
+                            {activeSidebarTab === 'history' && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-right-4 duration-200">
+                                    {history.map((entry, index) => ({...entry, originalIndex: index})).filter(e => e.source === 'ai').reverse().map((entry) => {
+                                            const isActive = entry.originalIndex === historyIndex;
+                                            return (<div key={entry.id} onClick={() => jumpToHistory(entry.originalIndex)} className={`p-3 rounded-xl cursor-pointer border transition-all ${isActive ? "bg-blue-500/10 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]" : "bg-slate-800/40 border-slate-800 hover:bg-slate-800 hover:border-slate-700"}`}><div className="flex justify-between items-center mb-2"><span className={`text-xs font-mono font-medium ${isActive ? "text-blue-400" : "text-slate-500"}`}>{entry.timestamp}</span>{isActive && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">当前状态</span>}</div><div className="text-xs text-slate-400 line-clamp-2 leading-relaxed">包含 {Object.values(entry.slots).reduce((acc, s) => acc + s.tags.length, 0)} 个提示词</div></div>);
+                                        })
+                                    }
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Header */}
+                    <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40 px-4 py-3 shadow-lg" onClick={e => e.stopPropagation()}>
+                        <div className="max-w-6xl mx-auto flex justify-between items-center">
+                            <div className="flex items-center gap-3"><div className="bg-gradient-to-tr from-pink-500 to-violet-600 p-2 rounded-lg shadow-lg shadow-pink-500/20"><Sparkles className="w-5 h-5 text-white animate-pulse" /></div><h1 className="text-lg md:text-xl font-bold text-slate-200 hidden md:block">SD 抽卡 <span className="text-slate-500 text-sm font-normal ml-1">AI 提示词生成器</span></h1><h1 className="text-lg font-bold text-slate-200 md:hidden">SD 抽卡</h1></div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={translateAll} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-all border border-slate-700/50 hover:border-slate-600" title="一键翻译当前词条">{isRolling && loadingText.includes("翻译") ? <Loader2 className="w-4 h-4 animate-spin text-blue-400" /> : <Languages className="w-4 h-4" />}<span className="text-sm font-medium hidden sm:inline">翻译</span></button>
+                                <button onClick={copyAllPrompts} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all border ${showCopyFeedback ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border-slate-700/50 hover:border-slate-600"}`}>{showCopyFeedback ? <CheckSquare className="w-4 h-4" /> : <Copy className="w-4 h-4" />}<span>{showCopyFeedback ? "已复制" : "复制咒语"}</span></button>
+                                <div className="w-px h-6 bg-slate-700/50 mx-1"></div>
+                                <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); if(!isSidebarOpen) setActiveSidebarTab('generate'); }} className={`p-2 rounded-lg transition-colors border ${isSidebarOpen ? "bg-slate-700 text-white border-slate-600" : "bg-transparent text-slate-400 hover:text-white hover:bg-slate-800 border-transparent"}`} title="菜单 (Esc / Ctrl+B)"><Menu className="w-5 h-5" /></button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main */}
+                    <main className="max-w-6xl mx-auto p-4 md:p-6 transition-all" onClick={e => e.stopPropagation()}>
+                        {!apiKey && (<div onClick={() => { setIsSidebarOpen(true); setActiveSidebarTab('settings'); }} className="mb-8 text-center cursor-pointer group"><div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pink-500/10 text-pink-300 text-sm font-medium border border-pink-500/20 group-hover:bg-pink-500/20 group-hover:border-pink-500/40 group-hover:scale-105 transition-all shadow-[0_0_15px_rgba(236,72,153,0.1)]"><Settings2 className="w-4 h-4 animate-bounce" /><span>请点击此处或菜单配置 DeepSeek API Key 以开始使用</span></div></div>)}
+                        {apiError && (<div className="max-w-2xl mx-auto mb-6 bg-red-500/10 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg text-center text-sm flex items-center justify-center gap-2"><AlertTriangle className="w-4 h-4" />{apiError}</div>)}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                            {SLOT_CONFIG.map((config) => {
+                                const slot = slots[config.id];
+                                if (!slot) return null;
+                                return (
+                                    <div key={config.id} className={`group flex flex-col rounded-xl border transition-all duration-300 overflow-hidden ${slot.locked ? "bg-slate-900 border-pink-500/40 shadow-[0_0_20px_rgba(236,72,153,0.05)]" : "bg-slate-900 border-slate-800 hover:border-slate-600 hover:shadow-lg"} ${!slot.included ? "opacity-60 grayscale-[0.5]" : ""}`}>
+                                        <div onClick={() => setExpandedSlotId(config.id)} className="flex justify-between items-center px-4 py-3 bg-slate-900/50 border-b border-slate-800/50 cursor-pointer hover:bg-slate-800/80 transition-colors" title="点击展开编辑">
+                                            <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-slate-400 uppercase"><config.icon className="w-3.5 h-3.5" />{config.label}</div>
+                                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                <button onClick={() => setExpandedSlotId(config.id)} className="p-1.5 rounded transition-colors text-slate-600 hover:text-white hover:bg-slate-800" title="放大编辑"><Maximize2 className="w-4 h-4" /></button>
+                                                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                                                <button onClick={() => copySlotContent(config.id)} className={`p-1.5 rounded transition-colors ${slotCopyFeedback && slotCopyFeedback.id === config.id ? "text-emerald-400 bg-emerald-400/10" : "text-slate-600 hover:text-emerald-400 hover:bg-slate-800"}`} title={slotCopyFeedback && slotCopyFeedback.id === config.id ? "已复制！" : "复制本栏内容"}>{slotCopyFeedback && slotCopyFeedback.id === config.id ? <CheckSquare className="w-4 h-4" /> : <Copy className="w-4 h-4" />}</button>
+                                                <button onClick={() => clearSlotTags(config.id)} className={`p-1.5 rounded transition-colors ${slot.locked ? "text-slate-700 cursor-not-allowed" : "text-slate-600 hover:text-red-400 hover:bg-slate-800"}`} title={slot.locked ? "模块已锁定，无法清空" : "清空本栏"} disabled={slot.locked}><Trash2 className="w-4 h-4" /></button>
+                                                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                                                <button onClick={() => toggleInclude(config.id)} className={`p-1.5 rounded transition-colors ${slot.included ? "text-emerald-400 hover:bg-emerald-400/10" : "text-slate-600 hover:text-slate-400"}`} title={slot.included ? "已包含在复制中" : "未包含"}>{slot.included ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}</button>
+                                                <button onClick={() => toggleLock(config.id)} className={`p-1.5 rounded transition-colors ${slot.locked ? "text-pink-400 bg-pink-400/10" : "text-slate-600 hover:text-slate-300 hover:bg-slate-800"}`} title={slot.locked ? "已锁定" : "未锁定"}>{slot.locked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}</button>
+                                            </div>
+                                        </div>
+                                        <div className="relative flex-grow flex flex-col h-[240px]">
+                                            <div className={`tag-container flex-1 p-3 overflow-y-auto custom-scrollbar bg-slate-900/50 cursor-text transition-colors ${dragData?.slotId === config.id ? 'bg-slate-800/30' : ''}`} ref={el => { if(!scrollRefs.current[config.id]) scrollRefs.current[config.id] = {}; scrollRefs.current[config.id].en = el; }} onScroll={() => handleSyncScroll(config.id, 'en')} onDragOver={(e) => handleDragOverContainer(e, config.id)} onDrop={handleDrop} onClick={(e) => handleContainerClick(config.id, e)}>
+                                                <div className="flex flex-wrap gap-1.5 pointer-events-none">
+                                                    {slot.tags.map((tag, index) => {
+                                                        const isSelected = selectedTagIds.has(tag.id);
+                                                        return (
+                                                            <React.Fragment key={tag.id}>
+                                                                {dropTarget && dropTarget.slotId === config.id && dropTarget.index === index && (<div className="w-1 h-6 bg-pink-500 rounded-full mx-0.5 animate-pulse shadow-[0_0_8px_rgba(236,72,153,0.8)]" />)}
+                                                                <div draggable onDragStart={(e) => handleDragStart(e, config.id, index)} onDragOver={(e) => handleDragOverTag(e, config.id, index)} onClick={(e) => handleTagClick(tag.id, e)} onDoubleClick={(e) => handleTagDoubleClick(tag.id, e)} className={`group/tag relative flex items-center gap-1 px-2 py-1 rounded text-xs font-mono border transition-all duration-100 select-none pointer-events-auto cursor-pointer ${editingTagId === tag.id ? "bg-slate-950 border-violet-500 ring-2 ring-violet-500/50 z-20" : isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-md z-10" : hoveredTagId === tag.id ? "bg-slate-700 border-slate-500 text-slate-200" : "bg-slate-800 border-slate-700 text-slate-300"} ${dragData?.slotId === config.id && dragData?.index === index ? 'opacity-20 scale-95' : ''}`} onMouseEnter={() => setHoveredTagId(tag.id)} onMouseLeave={() => setHoveredTagId(null)}>
+                                                                    <GripVertical className={`w-2.5 h-2.5 opacity-0 group-hover/tag:opacity-100 -ml-1 cursor-grab ${isSelected ? 'text-indigo-300' : 'text-slate-600'}`} />
+                                                                    {editingTagId === tag.id ? (<input ref={editInputRef} type="text" value={tag.en} onChange={(e) => updateTagText(config.id, tag.id, e.target.value)} onBlur={(e) => finishEditing(config.id, tag.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') finishEditing(config.id, tag.id, e.currentTarget.value); }} onClick={(e) => e.stopPropagation()} className="bg-transparent text-white border-none p-0 min-w-[50px] outline-none" />) : (<span>{tag.en}</span>)}
+                                                                    <button onClick={(e) => { e.stopPropagation(); removeTag(config.id, tag.id); }} className={`opacity-0 group-hover/tag:opacity-100 ml-0.5 ${isSelected ? 'text-indigo-200 hover:text-white' : 'hover:text-red-400'}`}><X className="w-3 h-3" /></button>
+                                                                </div>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    {dropTarget && dropTarget.slotId === config.id && dropTarget.index === slot.tags.length && (<div className="w-1 h-6 bg-pink-500 rounded-full mx-0.5 animate-pulse shadow-[0_0_8px_rgba(236,72,153,0.8)]" />)}
+                                                    <div className="relative flex items-center min-w-[60px] flex-grow max-w-[120px] pointer-events-auto"><Plus className="w-3 h-3 text-slate-600 absolute left-1 pointer-events-none" /><input ref={el => slotInputRefs.current[config.id] = el} type="text" placeholder="Add..." className="w-full bg-transparent border-none text-xs text-slate-300 placeholder:text-slate-600 focus:ring-0 px-1 pl-5 py-1" onKeyDown={(e) => { if (e.key === 'Enter') { addTag(config.id, e.target.value); e.target.value = ''; } }} onBlur={(e) => { addTag(config.id, e.target.value); e.target.value = ''; }} /></div>
+                                                </div>
+                                            </div>
+                                            <div className="h-px bg-slate-800 w-full flex items-center justify-center"><div className="bg-slate-800 px-2 text-[10px] text-slate-600 uppercase font-bold tracking-wider">Translation</div></div>
+                                            <div className="h-[90px] shrink-0 p-3 bg-slate-950/30 overflow-y-auto custom-scrollbar" ref={el => { if(!scrollRefs.current[config.id]) scrollRefs.current[config.id] = {}; scrollRefs.current[config.id].zh = el; }} onScroll={() => handleSyncScroll(config.id, 'zh')}>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {slot.tags.map((tag) => {
+                                                        const isSelected = selectedTagIds.has(tag.id);
+                                                        return (<div key={tag.id + '_zh'} onClick={(e) => handleTagClick(tag.id, e)} className={`group/zhtag relative flex items-center gap-1 px-2 py-0.5 rounded text-xs border transition-all duration-200 select-none cursor-pointer ${isSelected ? "bg-indigo-900/50 border-indigo-500/50 text-indigo-200 shadow-sm" : hoveredTagId === tag.id ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-200 shadow-sm" : "bg-transparent border-transparent text-slate-500"}`} onMouseEnter={() => setHoveredTagId(tag.id)} onMouseLeave={() => setHoveredTagId(null)}><span>{tag.zh === '?' ? "..." : tag.zh}</span><div className={`flex flex-col gap-0.5 opacity-0 group-hover/zhtag:opacity-100 transition-opacity ml-1 -mr-1`}><div onClick={(e) => { e.stopPropagation(); adjustTagWeight(config.id, tag.id, 0.1); }} className="h-2 w-2.5 bg-slate-800 border border-slate-600 hover:bg-emerald-500 hover:border-emerald-500 hover:text-white flex items-center justify-center rounded-[1px] cursor-pointer text-slate-400 select-none"><Plus className="w-1.5 h-1.5" /></div><div onClick={(e) => { e.stopPropagation(); adjustTagWeight(config.id, tag.id, -0.1); }} className="h-2 w-2.5 bg-slate-800 border border-slate-600 hover:bg-red-500 hover:border-red-500 hover:text-white flex items-center justify-center rounded-[1px] cursor-pointer text-slate-400 select-none"><Minus className="w-1.5 h-1.5" /></div></div></div>);
+                                                    })}
+                                                </div>
+                                            </div>
+                                            {isRolling && !slot.locked && <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[1px] flex items-center justify-center z-10"><RefreshCw className="w-6 h-6 text-pink-500 animate-spin" /></div>}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </main>
+
+                    {/* Bottom Button */}
+                    <div className="fixed bottom-6 left-0 right-0 z-30 px-4 pointer-events-none" onClick={e => e.stopPropagation()}>
+                        <div className="max-w-md mx-auto pointer-events-auto">
+                            <button onClick={handleBottomButtonClick} disabled={isRolling} className={`w-full group relative overflow-hidden rounded-2xl p-4 transition-all duration-200 shadow-2xl ${isRolling ? "scale-95 opacity-80" : "hover:scale-[1.02] hover:shadow-pink-500/20 cursor-pointer"}`}><div className={`absolute inset-0 animate-gradient-x ${!apiKey ? 'bg-slate-800' : 'bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500'}`}></div><div className="relative flex items-center justify-center gap-3 text-white font-bold text-lg tracking-widest uppercase text-shadow-sm">{isRolling ? <><RefreshCw className="w-5 h-5 animate-spin" /><span>{loadingText}</span></> : <><Sparkles className="w-5 h-5 animate-pulse" /><span>{!apiKey ? "点击设置 API Key" : "一键 AI 抽卡"}</span></>}</div></button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<StableDiffusionGacha />);
+    </script>
+</body>
+</html>
