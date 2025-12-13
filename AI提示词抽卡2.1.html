@@ -90,11 +90,87 @@
             { id: 'composition', label: '构图 (Composition)', icon: Settings2 },
         ];
 
-        const DEFAULT_SYSTEM_PROMPT = `# Role: Anime Art Director & Visual Storyteller
+        // 1. 魔导书专用的 AI 扩写 Prompt (保持不变)
+        const GRIMOIRE_SYSTEM_PROMPT = `# Role: Anime Art Director & Visual Storyteller
+You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts for Stable Diffusion. Your goal is to create vivid, logically coherent character illustrations with rich details based on the provided tags.
+Expand the provided tags into a detailed prompt suitable for Stable Diffusion. Focus on describing the visual elements, atmosphere, lighting, and composition.`;
+
+        // 2. 生成器专用的全新 Prompt (用户自定义)
+        const GENERATE_SYSTEM_PROMPT = `# Role: Anime Art Director & Visual Storyteller
 You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts for Stable Diffusion. Your goal is to create vivid, logically coherent character illustrations with rich details.
 
-(此处省略较长的默认Prompt以节省空间，功能保持不变)
-`;
+如果用户什么也没输入或者留空,则表示随机输入
+如果用于输入文本,则根据对应文本生成相关内容
+
+示范:
+输入 随机：
+
+预期结果：AI 会像抽卡一样，给你生成一个带有【特定发色/瞳色/发型】+【独特动作（如伸懒腰）】+【完整场景】的美少女 Prompt。
+
+输入 原神，胡桃，恶作剧：
+
+预期结果：AI 会锁定胡桃的外貌（双马尾/梅花瞳），并生成一个“做鬼脸”或“吓人”的动作，场景可能是夜晚的璃月。
+
+输入 粉色头发，女仆，笨手笨脚：
+
+预期结果：AI 会根据逻辑生成“打翻盘子”或“快要摔倒”的动作，表情是“慌张/流泪”，场景是“豪宅走廊”。
+
+
+
+## 1. Core Logic: The "Causal Chain"
+Every tag must be logically connected. Do NOT list random words.
+* **Physics:** If Action = "Running", then Hair = "Floating hair", "Windblown".
+* **Environment:** If Scene = "Sunset", then Light = "Orange light", "Long shadows".
+* **State:** If Action = "Waking up", then Appearance = "Messy hair", "Pajamas", "Stretching".
+
+
+
+## 2.Core Instruction: MAXIMUM RANDOMNESS & DIVERSITY
+- **NO Context Dependency:** Do NOT stick to previous patterns. Each generation should feel fresh and distinct.
+- **High Entropy:** If the theme is generic, apply wildly different sub-genres (Cyberpunk, Fantasy, School Life, Idol, Maid) randomly.
+
+
+## 3.Mandatory Output Structure
+You must output the prompt in this strict order. **Do not use Markdown lists, just one prompt block.**
+\`[Quality Tags], [Artist & Style], [Character Name (if any)], [Mandatory Appearance], [Random Details], [Clothing], [Action & Emotion], [Scene & Atmosphere], [Composition & Camera]\`
+
+
+
+## 4. Generation Rules (Crucial!)
+
+if the user specifies a character, generate the corresponding character's distinctive appearance features
+
+For example:
+
+if the user inputs: 原神,胡桃
+result: The AI will lock onto Hutao's appearance (twin tails, plum blossom pupils, long hair, red hair, red eyes)
+
+if the user inputs: 崩坏3,希儿
+result: The AI will lock onto Seele's appearance (blue hair,blue eyes,short hair)
+
+
+
+If the user does not specify a character, it means generating randomly
+### A. Mandatory Appearance (MUST INCLUDE)
+1.  \`[Color] hair\` (Use PURE RANDOM colors. e.g., pastel pink, silver, gradient blue, multi-colored, blonde, black, purple. Do NOT limit to specific sets.)
+2.  \`[Length/Style] hair\` (Use PURE RANDOM.e.g., Short hair, Long hair, Twin tails, Ponytail, Hime cut)
+3.  \`[Color] eyes\` (Use PURE RANDOM colors. e.g., heterochromia, glowing gold, deep blue, purple, red. Do NOT limit to specific sets.)
+
+### B. Random Details (Add Variety)
+Randomly inject 1-2 distinctive features to make the character unique:
+* *Examples:* \`ahoge\`, \`messy braided hair\`, \`hair ribbon\`, \`mole under eye\`, \`hair ornament\`, \`animal ears\`, \`hair over one eye\`, \`sharp teeth\`.
+
+### C. Rich Actions & Emotions (Visual Storytelling)
+Avoid static poses like "standing". Create a **"Frozen Moment"**:
+* *Slice of Life:* Tying hair, eating toast, adjusting glasses, stretching arms, looking at phone, yawning.
+* *Dynamic:* Skirt lifting (wind), jumping, reaching out to viewer, holding a weapon, casting magic.
+* *Emotion:* Don't just say "smile". Use: \`pout\`, \`blush\`, \`tears of joy\`, \`expressionless\`, \`smug\`, \`nervous sweating\`.
+
+### D. Artist & Style (Anime Focused)
+Choose artists that fit the theme:
+* *Cute/Daily:* \`art by kantoku, art by tianliang duo\` (Vibrant, clear).
+* *Epic/Fantasy:* \`art by wlop, art by ask (askzy), art by nardack\`.
+* *Soft/Emotional:* \`art by makoto shinkai, art by citemer\`.`;
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -175,7 +251,8 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             const [activeSidebarTab, setActiveSidebarTab] = useState('generate');
 
-            const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+            // 使用新的生成提示词作为默认值
+            const [systemPrompt, setSystemPrompt] = useState(GENERATE_SYSTEM_PROMPT);
             const [showPromptSettings, setShowPromptSettings] = useState(false);
             const [promptPresets, setPromptPresets] = useState([]);
             const [newPromptPresetName, setNewPromptPresetName] = useState("");
@@ -345,8 +422,6 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
                     isGrimoireHistoryAction.current = false;
                     return;
                 }
-                // 当 selectedGrimoireTags 变化时，推入历史记录
-                // 初始化时也会执行一次，这是预期的，作为初始状态
                 setGrimoireHistory(prev => {
                      const currentSlice = prev.slice(0, grimoireHistoryIndex + 1);
                      return [...currentSlice, new Set(selectedGrimoireTags)];
@@ -386,11 +461,9 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
 
                     // Undo/Redo (Global but contextual)
                     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-                        // 如果在文本输入框内，不干预默认的撤销
                         if (isInputActive) return;
 
                         e.preventDefault();
-                        // 判定是否处于魔导书上下文
                         const isGrimoireContext = activeSidebarTab === 'grimoire' || viewingBook;
                         
                         if (isGrimoireContext) {
@@ -464,7 +537,7 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
                 setPromptPresets(updated);
                 localStorage.setItem('sd_prompt_presets', JSON.stringify(updated));
             };
-            const restoreDefaultPrompt = () => { setSystemPrompt(DEFAULT_SYSTEM_PROMPT); showToast("已恢复默认提示词", "success"); };
+            const restoreDefaultPrompt = () => { setSystemPrompt(GENERATE_SYSTEM_PROMPT); showToast("已恢复默认提示词", "success"); };
 
             const handleSyncScroll = (slotId, source) => {
                 const refs = scrollRefs.current[slotId];
@@ -1042,7 +1115,8 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
                 setIsExpandingGrimoire(true);
                 const selectedContent = Array.from(selectedGrimoireTags).join(", ");
                 try {
-                    const expandedText = await callDeepSeekGenerateRaw(selectedContent, 'detailed', systemPrompt);
+                    // 使用专用的 Grimoire Prompt
+                    const expandedText = await callDeepSeekGenerateRaw(selectedContent, 'detailed', GRIMOIRE_SYSTEM_PROMPT);
                     setGrimoireExpansion(expandedText);
                     showToast("AI 扩写完成！", "success");
                 } catch (e) {
@@ -2139,10 +2213,10 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
 
                             {activeSidebarTab === 'tools' && (
                                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200">
-                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Lock className="w-4 h-4" /> 锁定控制</h3><div className="grid grid-cols-2 gap-2"><button onClick={batchLockAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition-colors" title="锁定所有槽位"><Shield className="w-3.5 h-3.5" /> 一键全锁</button><button onClick={batchUnlockAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition-colors" title="解锁所有槽位"><ShieldOff className="w-3.5 h-3.5" /> 一键解锁</button></div></div>
-                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><CheckSquare className="w-4 h-4" /> 勾选控制</h3><div className="grid grid-cols-2 gap-2"><button onClick={batchIncludeAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-emerald-600 text-slate-200 hover:text-white text-xs transition-colors" title="勾选所有槽位"><CheckCircle2 className="w-3.5 h-3.5" /> 一键全勾选</button><button onClick={batchExcludeAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-red-500 text-slate-200 hover:text-white text-xs transition-colors" title="取消勾选所有槽位"><XCircle className="w-3.5 h-3.5" /> 一键全取消</button></div></div>
-                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Scale className="w-4 h-4" /> 权重与内容</h3><div className="space-y-2"><button onClick={batchClearWeights} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-700 hover:bg-indigo-600 text-slate-200 hover:text-white text-xs transition-all" title="将所有权值重置为 1.0"><Scale className="w-3.5 h-3.5" /> 一键清除权重 (1.x)</button><button onClick={batchClearAllContent} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20 text-xs transition-all" title="清空所有未锁定槽位的内容"><Eraser className="w-3.5 h-3.5" /> 一键清空内容 (保留锁定)</button></div></div>
-                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><div className="flex justify-between items-center mb-3"><h3 className="text-sm font-bold text-slate-300 flex items-center gap-2"><ClipboardPaste className="w-4 h-4" /> 智能剪贴板解析</h3><button onClick={() => setSmartPasteContent("")} className="text-slate-500 hover:text-red-400 p-1 hover:bg-slate-700/50 rounded transition-colors" title="清空文本"><Trash2 className="w-3.5 h-3.5" /></button></div><div className="space-y-3"><textarea value={smartPasteContent} onChange={(e) => setSmartPasteContent(e.target.value)} placeholder="在此粘贴 Civitai 等网站的完整咒语 (tags)..." className="w-full h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none" /><button onClick={handleSmartPaste} disabled={isSmartParsing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed" title="自动识别粘贴内容并填入对应槽位">{isSmartParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BrainCircuit className="w-3.5 h-3.5" />}{isSmartParsing ? "正在解析..." : "智能解析并填入"}</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Lock className="w-4 h-4" /> 锁定控制</h3><div className="grid grid-cols-2 gap-2"><button onClick={batchLockAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition-colors"><Shield className="w-3.5 h-3.5" /> 一键全锁</button><button onClick={batchUnlockAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition-colors"><ShieldOff className="w-3.5 h-3.5" /> 一键解锁</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><CheckSquare className="w-4 h-4" /> 勾选控制</h3><div className="grid grid-cols-2 gap-2"><button onClick={batchIncludeAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-emerald-600 text-slate-200 hover:text-white text-xs transition-colors"><CheckCircle2 className="w-3.5 h-3.5" /> 一键全勾选</button><button onClick={batchExcludeAll} className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-700 hover:bg-red-500 text-slate-200 hover:text-white text-xs transition-colors"><XCircle className="w-3.5 h-3.5" /> 一键全取消</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Scale className="w-4 h-4" /> 权重与内容</h3><div className="space-y-2"><button onClick={batchClearWeights} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-700 hover:bg-indigo-600 text-slate-200 hover:text-white text-xs transition-all"><Scale className="w-3.5 h-3.5" /> 一键清除权重 (1.x)</button><button onClick={batchClearAllContent} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20 text-xs transition-all"><Eraser className="w-3.5 h-3.5" /> 一键清空内容 (保留锁定)</button></div></div>
+                                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50"><div className="flex justify-between items-center mb-3"><h3 className="text-sm font-bold text-slate-300 flex items-center gap-2"><ClipboardPaste className="w-4 h-4" /> 智能剪贴板解析</h3><button onClick={() => setSmartPasteContent("")} className="text-slate-500 hover:text-red-400 p-1 hover:bg-slate-700/50 rounded transition-colors" title="清空文本"><Trash2 className="w-3.5 h-3.5" /></button></div><div className="space-y-3"><textarea value={smartPasteContent} onChange={(e) => setSmartPasteContent(e.target.value)} placeholder="在此粘贴 Civitai 等网站的完整咒语 (tags)..." className="w-full h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none" /><button onClick={handleSmartPaste} disabled={isSmartParsing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed">{isSmartParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BrainCircuit className="w-3.5 h-3.5" />}{isSmartParsing ? "正在解析..." : "智能解析并填入"}</button></div></div>
                                 </div>
                             )}
                             {activeSidebarTab === 'settings' && (
@@ -2168,7 +2242,7 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
                             )}
                             {activeSidebarTab === 'presets' && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
-                                    <div className="space-y-2"><div className="flex gap-2"><input type="text" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} placeholder="新预设名称..." className={`flex-1 bg-slate-950 border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none transition-all ${presetNameError ? 'border-red-500 animate-shake' : 'border-slate-700 focus:border-emerald-500'}`} /><button onClick={savePreset} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shadow-lg shadow-emerald-900/20" title="保存当前所有槽位状态为预设">保存</button></div><div className="flex gap-2"><button onClick={exportPresets} className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg py-2 text-xs text-slate-300 transition-colors" title="导出预设为 JSON 文件"><Download className="w-3.5 h-3.5" /> 导出备份</button><button onClick={triggerImport} className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg py-2 text-xs text-slate-300 transition-colors" title="从 JSON 文件导入预设"><Upload className="w-3.5 h-3.5" /> 导入</button><input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".json" className="hidden" /></div></div>
+                                    <div className="space-y-2"><div className="flex gap-2"><input type="text" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} placeholder="新预设名称..." className={`flex-1 bg-slate-950 border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none transition-all ${presetNameError ? 'border-red-500 animate-shake' : 'border-slate-700 focus:border-emerald-500'}`} /><button onClick={savePreset} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shadow-lg shadow-emerald-900/20">保存</button></div><div className="flex gap-2"><button onClick={exportPresets} className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg py-2 text-xs text-slate-300 transition-colors"><Download className="w-3.5 h-3.5" /> 导出备份</button><button onClick={triggerImport} className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-lg py-2 text-xs text-slate-300 transition-colors"><Upload className="w-3.5 h-3.5" /> 导入</button><input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".json" className="hidden" /></div></div>
                                     <div className="space-y-2 pt-2">{presets.length === 0 && (<div className="flex flex-col items-center justify-center py-12 text-slate-600 gap-3 border-2 border-dashed border-slate-800 rounded-xl"><FileJson className="w-10 h-10 opacity-30" /><span className="text-sm">暂无保存的预设</span></div>)}{presets.map(preset => (<div key={preset.id} className="group relative p-3 rounded-xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800 hover:border-slate-600 transition-all flex justify-between items-center cursor-pointer" onClick={() => loadPreset(preset)}><div className="flex-1 min-w-0 pr-3"><div className="font-bold text-slate-200 mb-1 truncate text-sm">{preset.name}</div><div className="text-[10px] text-slate-500 flex items-center gap-2"><span>{new Date(preset.id).toLocaleDateString()}</span><span className="w-1 h-1 bg-slate-600 rounded-full"></span><span className="text-emerald-500/80">{Object.values(preset.slots).reduce((acc, s) => acc + s.tags.length, 0)} 词</span></div></div><button onClick={(e) => deletePreset(preset.id, e)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="删除"><Trash2 className="w-4 h-4" /></button></div>))}</div>
                                 </div>
                             )}
