@@ -65,7 +65,7 @@
             Wrench, Shield, ShieldOff, Scale, ClipboardPaste, BrainCircuit,
             CheckCircle2, XCircle, Zap, Play, Info, AlertCircle, FileText, RotateCcw, PenLine,
             Github, ExternalLink, Code2, BookOpen, Dices, ArrowRight, FilePlus, Bot, ChevronDown, Folder,
-            Search, MoreVertical, LayoutGrid, Check, Maximize2, Minimize2, Layers, Edit3
+            Search, MoreVertical, LayoutGrid, Check, Maximize2, Minimize2, Layers, Edit3, Shuffle
         } from 'lucide-react';
 
         // --- 常量定义 ---
@@ -1104,6 +1104,37 @@ Choose artists that fit the theme:
                     showToast(`已从 ${Object.keys(checkedGroups).length} 个分组中各抽取了 1 个标签`, "success");
                 }
             };
+            
+            // 新增功能：小组勾选随机抽取
+            const handleRandomRollPerCategory = () => {
+                if (!viewingBook || checkedGrimoireScopes.size === 0) {
+                    showToast("请先勾选至少一个分类", "warning");
+                    return;
+                }
+
+                let rolledTags = [];
+                // Iterate directly through checked scopes
+                checkedGrimoireScopes.forEach(scope => {
+                    const [gIndex, cIndex] = scope.split('-').map(Number);
+                    const group = viewingBook.groups[gIndex];
+                    if (group && group.categories && group.categories[cIndex]) {
+                        const category = group.categories[cIndex];
+                        if (category.tags && category.tags.length > 0) {
+                            const randomTag = category.tags[Math.floor(Math.random() * category.tags.length)];
+                            rolledTags.push(randomTag.name);
+                        }
+                    }
+                });
+
+                if (rolledTags.length > 0) {
+                    setSelectedGrimoireTags(prev => {
+                        const next = new Set(prev);
+                        rolledTags.forEach(t => next.add(t));
+                        return next;
+                    });
+                    showToast(`已从 ${rolledTags.length} 个选中的分类中各抽取了 1 个标签`, "success");
+                }
+            };
 
             const handleRandomRollFromSelection = () => {
                 handleRandomRollPerGroup();
@@ -1846,6 +1877,13 @@ Choose artists that fit the theme:
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={handleRandomRollPerCategory}
+                                        className="hidden md:flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-purple-900/20"
+                                        title="从勾选的每个小分类中各随机抽取一个标签"
+                                    >
+                                        <Dices className="w-4 h-4" /> 小组勾选随机抽选
+                                    </button>
                                     <button 
                                         onClick={handleRandomRollPerGroup}
                                         className="hidden md:flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-indigo-900/20"
