@@ -1,7 +1,7 @@
 
-AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:生成对应主题的提示词+随机tag抽取+tag库标签选取+自动分词,模块化修改提示词
+AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:生成对应主题的提示词+随机tag抽取+tag库标签选取+自动分词+模块化修改提示词+翻译
 
-目前采用deepseek的API，后续打算加入更多API调用
+基于googleAI辅助,目前采用deepseek的API，后续打算加入更多API调用
 
 # 🪄 AI Tag Gacha (SD 提示词抽卡神器)
 
