@@ -4,14 +4,16 @@ AITagGacha 是一个创新的AI绘画提示词生成工具，抽取随机提示�
 
 # 🪄 AI Tag Gacha (SD 提示词抽卡神器)
 
-<img width="2072" height="1839" alt="image" src="https://github.com/user-attachments/assets/1af5a09a-4e55-4fb0-bcae-2af655ccc841" />
+
 
 
 **AI Tag Gacha** 是一款专为 Stable Diffusion (SD) 用户设计的**可视化提示词生成与管理工具**。
 
 它采用“抽卡”的游戏化交互方式，结合 DeepSeek 强大的 AI 能力，帮助你快速生成、管理、翻译和组合复杂的 Prompt。它完全基于单文件 HTML 开发，无需安装 Node.js，无需构建，**下载即用**。
 
-<img width="2072" height="1839" alt="image" src="https://github.com/user-attachments/assets/4ea755d2-47a3-4548-98da-679e2ca9de65" />
+<img width="2945" height="1846" alt="image" src="https://github.com/user-attachments/assets/bc650d3b-c5e6-44e6-8959-62b83da4b567" />
+<img width="3787" height="1824" alt="image" src="https://github.com/user-attachments/assets/4f9dbff8-046c-412c-9780-8a635307e9c6" />
+
 
 
 ## ✨ 核心功能 (Features)
