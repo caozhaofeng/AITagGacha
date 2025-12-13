@@ -36,7 +36,7 @@ AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:�
 1.  **下载**: 点击本项目右上角的 `Code` -> `Download ZIP`，或者直接下载 `AI提示词抽卡2.1.html` 文件。
 2.  **运行**: 直接使用 Chrome / Edge / Firefox 浏览器打开该 `.html` 文件。
 3.  **配置 API**:
-    * 点击侧边栏的 **设置 (Settings)**。
+    * 点击侧边栏的 **设置 (Settings)**或**ESC**。
     * 输入你的 [DeepSeek API Key](https://platform.deepseek.com/)。
     * (可选) 如果有需要，可以修改 API Base URL。
 4.  **开始创作**: 点击底部的“一键 AI 抽卡”或侧边栏的“魔导书”开始使用。
