@@ -6,10 +6,20 @@ AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:�
 
 
 基于googleAI辅助,目前采用deepseek的API，后续打算加入更多API调用
+
+
 更新日志
+
+
 2.0版本添加了魔导书,可以导入json添加词库选择(已删)
+
+
 2.3版本增加了多种API选择,你现在可以选取不同API了(已删)
+
+
 2.4版本增加ctrl+x,可以快捷操作卡槽里的提示词 (最新)
+
+
 
 -----------------------------分界线------------------------------------------
 
@@ -103,6 +113,7 @@ AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:�
   - `gemini-1.5-pro`
   - `gemini-1.5-flash`
   - `gemini-2.0-flash-lite-preview`
+  - `gemini-3-pro-preview`
 
 ### 4. Custom (自定义/OpenAI 兼容)
 如果你使用 OneAPI、NewAPI 或其他中转服务：
