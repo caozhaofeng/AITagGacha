@@ -50,7 +50,6 @@
         }
         .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
     </style>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <div id="root"></div>
@@ -474,9 +473,9 @@ Choose artists that fit the theme.`;
             }, [selectedGrimoireTags]);
 
 
-            // 快捷键优化 (保持不变)
+            // 快捷键优化 (新增 Ctrl+X, Ctrl+V)
             useEffect(() => {
-                const handleKeyDown = (e) => {
+                const handleKeyDown = async (e) => {
                     const activeTag = document.activeElement.tagName;
                     const isInputActive = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
 
@@ -506,10 +505,79 @@ Choose artists that fit the theme.`;
                          if (isGrimoireContext) { redoGrimoire(); } else { redo(); }
                          return;
                     }
-                    if (isInputActive) { if (!e.ctrlKey && !e.metaKey) return; if ((e.ctrlKey || e.metaKey) && e.key === 'c') return; }
+
+                    // Allow native Copy/Cut/Paste/SelectAll in inputs
+                    if (isInputActive) { 
+                        if (!e.ctrlKey && !e.metaKey) return; 
+                        if ((e.ctrlKey || e.metaKey) && ['c', 'x', 'v', 'a'].includes(e.key.toLowerCase())) return;
+                    }
+
                     if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'm')) { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
                     if (e.key === 'Delete' || e.key === 'Backspace') { if (!isInputActive && selectedTagIds.size > 0) { e.preventDefault(); deleteSelectedTags(); } }
+                    
+                    // Copy (Ctrl+C)
                     if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (!isInputActive && selectedTagIds.size > 0) { e.preventDefault(); copySelectedTags(); } }
+
+                    // Cut (Ctrl+X)
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+                        if (!isInputActive && selectedTagIds.size > 0) {
+                            e.preventDefault();
+                            // Logic: Copy then Delete
+                            const selectedTexts = [];
+                            SLOT_CONFIG.forEach(c => {
+                                const slot = slots[c.id];
+                                if (slot && slot.tags) {
+                                    slot.tags.forEach(t => { if (selectedTagIds.has(t.id)) selectedTexts.push(t.en); });
+                                }
+                            });
+                            const text = selectedTexts.join(", ");
+                            if (text) {
+                                const ta = document.createElement('textarea');
+                                ta.value = text;
+                                document.body.appendChild(ta);
+                                ta.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(ta);
+                                
+                                deleteSelectedTags();
+                                showToast("已剪切选中标签", "success");
+                            }
+                        }
+                    }
+
+                    // Paste (Ctrl+V)
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                         if (!isInputActive) {
+                            e.preventDefault();
+                            try {
+                                const text = await navigator.clipboard.readText();
+                                if (!text || !text.trim()) return;
+
+                                let targetSlotId = expandedSlotId;
+                                // If not in expanded mode, try to infer target slot from selected tags
+                                if (!targetSlotId && selectedTagIds.size > 0) {
+                                    for (const config of SLOT_CONFIG) {
+                                        const slot = slots[config.id];
+                                        if (slot && slot.tags.some(t => selectedTagIds.has(t.id))) {
+                                            targetSlotId = config.id;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (targetSlotId) {
+                                    addTag(targetSlotId, text);
+                                    const slotLabel = SLOT_CONFIG.find(c => c.id === targetSlotId)?.label;
+                                    showToast(`已粘贴到 [${slotLabel}]`, "success");
+                                } else {
+                                    showToast("请先进入全屏编辑或选中标签以确定粘贴位置", "warning");
+                                }
+                            } catch (err) {
+                                console.error(err);
+                                showToast("无法读取剪贴板", "error");
+                            }
+                         }
+                    }
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
@@ -1838,7 +1906,7 @@ Choose artists that fit the theme.`;
                                                                 onDrop={handleDrop}
                                                                 onClick={(e) => handleTagClick(tag.id, e)} 
                                                                 onDoubleClick={(e) => handleTagDoubleClick(tag.id, e)}
-                                                                className={`group/tag relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono border transition-all select-none cursor-pointer ${editingTagId === tag.id ? "bg-slate-950 border-violet-500 ring-2 ring-violet-500/50" : isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-lg scale-105" : hoveredTagId === tag.id ? "bg-slate-800 border-slate-500 text-slate-200" : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-slate-600"}`}
+                                                                className={`group/tag relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono border transition-all select-none cursor-pointer ${editingTagId === tag.id ? "bg-slate-950 border-violet-500 ring-2 ring-violet-500/50" : isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-lg scale-105" : hoveredTagId === tag.id ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-100" : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-slate-600"}`}
                                                                 onMouseEnter={() => setHoveredTagId(tag.id)} 
                                                                 onMouseLeave={() => setHoveredTagId(null)}
                                                             >
@@ -1883,15 +1951,22 @@ Choose artists that fit the theme.`;
                                                         <div 
                                                             key={tag.id + '_zh_exp'} 
                                                             onClick={(e) => handleTagClick(tag.id, e)}
-                                                            className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${isSelected ? "bg-indigo-900/30 border-indigo-500/50" : hoveredTagId === tag.id ? "bg-slate-800 border-slate-600" : "bg-slate-900/50 border-slate-800 hover:border-slate-700"}`}
+                                                            className={`group flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer ${isSelected ? "bg-indigo-900/30 border-indigo-500/50" : hoveredTagId === tag.id ? "bg-yellow-500/20 border-yellow-500/50" : "bg-slate-900/50 border-slate-800 hover:border-slate-700"}`}
                                                             onMouseEnter={() => setHoveredTagId(tag.id)} 
                                                             onMouseLeave={() => setHoveredTagId(null)}
                                                         >
-                                                            <div className="flex flex-col min-w-0">
-                                                                <span className="text-xs text-slate-400 font-mono truncate mb-0.5">{tag.en}</span>
-                                                                <span className={`text-sm font-medium truncate ${tag.zh === '?' ? "text-slate-600" : "text-slate-300"}`}>{tag.zh === '?' ? "未翻译" : tag.zh}</span>
+                                                            <div className="flex-1 flex flex-col min-w-0">
+                                                                <span className={`text-xs font-mono truncate mb-0.5 ${hoveredTagId === tag.id ? "text-yellow-200/70" : "text-slate-400"}`}>{tag.en}</span>
+                                                                <span className={`text-sm font-medium truncate ${tag.zh === '?' ? "text-slate-600" : hoveredTagId === tag.id ? "text-yellow-100" : "text-slate-300"}`}>{tag.zh === '?' ? "未翻译" : tag.zh}</span>
                                                             </div>
-                                                            <div className="flex items-center gap-1 bg-slate-950 rounded border border-slate-800 p-0.5">
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); removeTag(expandedSlotId, tag.id); }} 
+                                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-800 hover:text-red-400 rounded text-slate-500 transition-all flex-shrink-0" 
+                                                                title="删除"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                            <div className="flex items-center gap-1 bg-slate-950 rounded border border-slate-800 p-0.5 flex-shrink-0">
                                                                 <button onClick={(e) => { e.stopPropagation(); adjustTagWeight(expandedSlotId, tag.id, -0.1); }} className="p-1 hover:bg-slate-800 hover:text-red-400 rounded text-slate-500"><Minus className="w-3 h-3" /></button>
                                                                 <div className="w-px h-3 bg-slate-800"></div>
                                                                 <button onClick={(e) => { e.stopPropagation(); adjustTagWeight(expandedSlotId, tag.id, 0.1); }} className="p-1 hover:bg-slate-800 hover:text-emerald-400 rounded text-slate-500"><Plus className="w-3 h-3" /></button>
@@ -2240,13 +2315,27 @@ Choose artists that fit the theme.`;
                                                         <button onClick={clearSelectedGrimoireTags} className="text-[10px] text-red-400 hover:text-red-300 transition-colors">清空</button>
                                                     </div>
                                                 </div>
-                                                <div className="bg-slate-950/50 p-2 rounded-lg border border-pink-500/20 max-h-24 overflow-y-auto custom-scrollbar">
-                                                    <div className="flex flex-wrap gap-1.5">
+                                                
+                                                <div className="flex flex-col gap-2 bg-slate-950 border border-slate-800 rounded-lg p-2 min-h-[60px]">
+                                                    <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto custom-scrollbar">
                                                         {Array.from(selectedGrimoireTags).map(tag => (
-                                                            <span key={tag} onClick={() => toggleGrimoireTag(tag)} className="group cursor-pointer px-2 py-1 bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 rounded text-[10px] border border-pink-500/20 hover:border-pink-500/40 flex items-center gap-1 transition-all">
+                                                            <span key={tag} onClick={() => toggleGrimoireTag(tag)} className="group cursor-pointer px-2 py-1 bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 rounded text-[10px] border border-pink-500/20 hover:border-pink-500/40 flex items-center gap-1">
                                                                 {tag} <X className="w-2.5 h-2.5 opacity-50 group-hover:opacity-100" />
                                                             </span>
                                                         ))}
+                                                        {selectedGrimoireTags.size === 0 && <span className="text-xs text-slate-600 italic">点击标签或使用随机抽取功能...</span>}
+                                                    </div>
+                                                    {/* Quick Add Input inside Modal Footer */}
+                                                    <div className="flex gap-2 mt-1">
+                                                        <input 
+                                                            type="text" 
+                                                            value={customGrimoireTagInput}
+                                                            onChange={(e) => setCustomGrimoireTagInput(e.target.value)}
+                                                            onKeyDown={(e) => { if(e.key === 'Enter') addCustomGrimoireTag(); }}
+                                                            placeholder="手动添加..." 
+                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:border-pink-500 focus:outline-none"
+                                                        />
+                                                        <button onClick={addCustomGrimoireTag} className="px-2 bg-slate-800 border border-slate-700 rounded text-slate-400 hover:text-white hover:border-slate-500"><Plus className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2472,7 +2561,7 @@ Choose artists that fit the theme.`;
                                                         return (
                                                             <React.Fragment key={tag.id}>
                                                                 {dropTarget && dropTarget.slotId === config.id && dropTarget.index === index && (<div className="w-1 h-6 bg-pink-500 rounded-full mx-0.5 animate-pulse shadow-[0_0_8px_rgba(236,72,153,0.8)]" />)}
-                                                                <div draggable onDragStart={(e) => handleDragStart(e, config.id, index)} onDragOver={(e) => handleDragOverTag(e, config.id, index)} onClick={(e) => handleTagClick(tag.id, e)} onDoubleClick={(e) => handleTagDoubleClick(tag.id, e)} className={`group/tag relative flex items-center gap-1 px-2 py-1 rounded text-xs font-mono border transition-all duration-100 select-none pointer-events-auto cursor-pointer ${editingTagId === tag.id ? "bg-slate-950 border-violet-500 ring-2 ring-violet-500/50 z-20" : isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-md z-10" : hoveredTagId === tag.id ? "bg-slate-700 border-slate-500 text-slate-200" : "bg-slate-800 border-slate-700 text-slate-300"} ${dragData?.slotId === config.id && dragData?.index === index ? 'opacity-20 scale-95' : ''}`} onMouseEnter={() => setHoveredTagId(tag.id)} onMouseLeave={() => setHoveredTagId(null)}>
+                                                                <div draggable onDragStart={(e) => handleDragStart(e, config.id, index)} onDragOver={(e) => handleDragOverTag(e, config.id, index)} onClick={(e) => handleTagClick(tag.id, e)} onDoubleClick={(e) => handleTagDoubleClick(tag.id, e)} className={`group/tag relative flex items-center gap-1 px-2 py-1 rounded text-xs font-mono border transition-all duration-100 select-none pointer-events-auto cursor-pointer ${editingTagId === tag.id ? "bg-slate-950 border-violet-500 ring-2 ring-violet-500/50 z-20" : isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-md z-10" : hoveredTagId === tag.id ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-100" : "bg-slate-700 border-slate-500 text-slate-200"} ${dragData?.slotId === config.id && dragData?.index === index ? 'opacity-20 scale-95' : ''}`} onMouseEnter={() => setHoveredTagId(tag.id)} onMouseLeave={() => setHoveredTagId(null)}>
                                                                     <GripVertical className={`w-2.5 h-2.5 opacity-0 group-hover/tag:opacity-100 -ml-1 cursor-grab ${isSelected ? 'text-indigo-300' : 'text-slate-600'}`} />
                                                                     {editingTagId === tag.id ? (<input ref={editInputRef} type="text" value={tag.en} onChange={(e) => updateTagText(config.id, tag.id, e.target.value)} onBlur={(e) => finishEditing(config.id, tag.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') finishEditing(config.id, tag.id, e.currentTarget.value); }} onClick={(e) => e.stopPropagation()} className="bg-transparent text-white border-none p-0 min-w-[50px] outline-none" />) : (<span>{tag.en}</span>)}
                                                                     <button onClick={(e) => { e.stopPropagation(); removeTag(config.id, tag.id); }} className={`opacity-0 group-hover/tag:opacity-100 ml-0.5 ${isSelected ? 'text-indigo-200 hover:text-white' : 'hover:text-red-400'}`}><X className="w-3 h-3" /></button>
@@ -2489,7 +2578,9 @@ Choose artists that fit the theme.`;
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {slot.tags.map((tag) => {
                                                         const isSelected = selectedTagIds.has(tag.id);
-                                                        return (<div key={tag.id + '_zh'} onClick={(e) => handleTagClick(tag.id, e)} className={`group/zhtag relative flex items-center gap-1 px-2 py-0.5 rounded text-xs border transition-all duration-200 select-none cursor-pointer ${isSelected ? "bg-indigo-900/50 border-indigo-500/50 text-indigo-200 shadow-sm" : hoveredTagId === tag.id ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-200 shadow-sm" : "bg-transparent border-transparent text-slate-500"}`} onMouseEnter={() => setHoveredTagId(tag.id)} onMouseLeave={() => setHoveredTagId(null)}><span>{tag.zh === '?' ? "..." : tag.zh}</span><div className={`flex flex-col gap-0.5 opacity-0 group-hover/zhtag:opacity-100 transition-opacity ml-1 -mr-1`}><div onClick={(e) => { e.stopPropagation(); adjustTagWeight(config.id, tag.id, 0.1); }} className="h-2 w-2.5 bg-slate-800 border border-slate-600 hover:bg-emerald-500 hover:border-emerald-500 hover:text-white flex items-center justify-center rounded-[1px] cursor-pointer text-slate-400 select-none"><Plus className="w-1.5 h-1.5" /></div><div onClick={(e) => { e.stopPropagation(); adjustTagWeight(config.id, tag.id, -0.1); }} className="h-2 w-2.5 bg-slate-800 border border-slate-600 hover:bg-red-500 hover:border-red-500 hover:text-white flex items-center justify-center rounded-[1px] cursor-pointer text-slate-400 select-none"><Minus className="w-1.5 h-1.5" /></div></div></div>);
+                                                        return (<div key={tag.id + '_zh'} onClick={(e) => handleTagClick(tag.id, e)} className={`group/zhtag relative flex items-center gap-1 px-2 py-0.5 rounded text-xs border transition-all duration-200 select-none cursor-pointer ${isSelected ? "bg-indigo-900/50 border-indigo-500/50 text-indigo-200 shadow-sm" : hoveredTagId === tag.id ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-200 shadow-sm" : "bg-transparent border-transparent text-slate-500"}`} onMouseEnter={() => setHoveredTagId(tag.id)} onMouseLeave={() => setHoveredTagId(null)}>
+                                                            <button onClick={(e) => { e.stopPropagation(); removeTag(config.id, tag.id); }} className="opacity-0 group-hover/zhtag:opacity-100 -ml-1 mr-1 p-0.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-all"><X className="w-3 h-3" /></button>
+                                                            <span>{tag.zh === '?' ? "..." : tag.zh}</span><div className={`flex flex-col gap-0.5 opacity-0 group-hover/zhtag:opacity-100 transition-opacity ml-1 -mr-1`}><div onClick={(e) => { e.stopPropagation(); adjustTagWeight(config.id, tag.id, 0.1); }} className="h-2 w-2.5 bg-slate-800 border border-slate-600 hover:bg-emerald-500 hover:border-emerald-500 hover:text-white flex items-center justify-center rounded-[1px] cursor-pointer text-slate-400 select-none"><Plus className="w-1.5 h-1.5" /></div><div onClick={(e) => { e.stopPropagation(); adjustTagWeight(config.id, tag.id, -0.1); }} className="h-2 w-2.5 bg-slate-800 border border-slate-600 hover:bg-red-500 hover:border-red-500 hover:text-white flex items-center justify-center rounded-[1px] cursor-pointer text-slate-400 select-none"><Minus className="w-1.5 h-1.5" /></div></div></div>);
                                                     })}
                                                 </div>
                                             </div>
@@ -2514,6 +2605,5 @@ Choose artists that fit the theme.`;
         const root = createRoot(document.getElementById('root'));
         root.render(<StableDiffusionGacha />);
     </script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
