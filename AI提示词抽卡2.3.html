@@ -50,6 +50,7 @@
         }
         .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
     </style>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <div id="root"></div>
@@ -65,7 +66,8 @@
             Wrench, Shield, ShieldOff, Scale, ClipboardPaste, BrainCircuit,
             CheckCircle2, XCircle, Zap, Play, Info, AlertCircle, FileText, RotateCcw, PenLine,
             Github, ExternalLink, Code2, BookOpen, Dices, ArrowRight, FilePlus, Bot, ChevronDown, Folder,
-            Search, MoreVertical, LayoutGrid, Check, Maximize2, Minimize2, Layers, Edit3, Shuffle
+            Search, MoreVertical, LayoutGrid, Check, Maximize2, Minimize2, Layers, Edit3, Shuffle,
+            Server, Globe, Cpu
         } from 'lucide-react';
 
         // --- 常量定义 ---
@@ -90,7 +92,39 @@
             { id: 'composition', label: '构图 (Composition)', icon: Settings2 },
         ];
 
-        // 1. 魔导书专用的 AI 扩写 Prompt (保持不变)
+        // API 提供商配置
+        const API_PROVIDERS = {
+            deepseek: {
+                id: 'deepseek',
+                name: 'DeepSeek',
+                defaultBaseUrl: 'https://api.deepseek.com',
+                defaultModel: 'deepseek-chat',
+                type: 'openai'
+            },
+            grok: {
+                id: 'grok',
+                name: 'Grok (xAI)',
+                defaultBaseUrl: 'https://api.x.ai/v1',
+                defaultModel: 'grok-2-latest',
+                type: 'openai'
+            },
+            gemini: {
+                id: 'gemini',
+                name: 'Google Gemini',
+                defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+                defaultModel: 'gemini-2.0-flash',
+                type: 'gemini'
+            },
+            custom: {
+                id: 'custom',
+                name: 'Custom (OpenAI)',
+                defaultBaseUrl: '',
+                defaultModel: '',
+                type: 'openai'
+            }
+        };
+
+        // 1. 魔导书专用的 AI 扩写 Prompt
         const GRIMOIRE_SYSTEM_PROMPT = `# Role: Anime Art Director & Visual Storyteller
 You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts for Stable Diffusion. Your goal is to create vivid, logically coherent character illustrations with rich details based on the provided tags.
 Expand the provided tags into a detailed prompt suitable for Stable Diffusion. Focus on describing the visual elements, atmosphere, lighting, and composition.`;
@@ -104,73 +138,32 @@ You are an expert in generating high-quality **Anime Style (Niji/2D)** prompts f
 
 示范:
 输入 随机：
-
 预期结果：AI 会像抽卡一样，给你生成一个带有【特定发色/瞳色/发型】+【独特动作（如伸懒腰）】+【完整场景】的美少女 Prompt。
 
 输入 原神，胡桃，恶作剧：
-
 预期结果：AI 会锁定胡桃的外貌（双马尾/梅花瞳），并生成一个“做鬼脸”或“吓人”的动作，场景可能是夜晚的璃月。
-
-输入 粉色头发，女仆，笨手笨脚：
-
-预期结果：AI 会根据逻辑生成“打翻盘子”或“快要摔倒”的动作，表情是“慌张/流泪”，场景是“豪宅走廊”。
-
-
 
 ## 1. Core Logic: The "Causal Chain"
 Every tag must be logically connected. Do NOT list random words.
 * **Physics:** If Action = "Running", then Hair = "Floating hair", "Windblown".
 * **Environment:** If Scene = "Sunset", then Light = "Orange light", "Long shadows".
-* **State:** If Action = "Waking up", then Appearance = "Messy hair", "Pajamas", "Stretching".
-
-
 
 ## 2.Core Instruction: MAXIMUM RANDOMNESS & DIVERSITY
 - **NO Context Dependency:** Do NOT stick to previous patterns. Each generation should feel fresh and distinct.
-- **High Entropy:** If the theme is generic, apply wildly different sub-genres (Cyberpunk, Fantasy, School Life, Idol, Maid) randomly.
-
 
 ## 3.Mandatory Output Structure
 You must output the prompt in this strict order. **Do not use Markdown lists, just one prompt block.**
 \`[Quality Tags], [Artist & Style], [Character Name (if any)], [Mandatory Appearance], [Random Details], [Clothing], [Action & Emotion], [Scene & Atmosphere], [Composition & Camera]\`
 
-
-
 ## 4. Generation Rules (Crucial!)
-
-if the user specifies a character, generate the corresponding character's distinctive appearance features
-
-For example:
-
-if the user inputs: 原神,胡桃
-result: The AI will lock onto Hutao's appearance (twin tails, plum blossom pupils, long hair, red hair, red eyes)
-
-if the user inputs: 崩坏3,希儿
-result: The AI will lock onto Seele's appearance (blue hair,blue eyes,short hair)
-
-
-
-If the user does not specify a character, it means generating randomly
-### A. Mandatory Appearance (MUST INCLUDE)
-1.  \`[Color] hair\` (Use PURE RANDOM colors. e.g., pastel pink, silver, gradient blue, multi-colored, blonde, black, purple. Do NOT limit to specific sets.)
-2.  \`[Length/Style] hair\` (Use PURE RANDOM.e.g., Short hair, Long hair, Twin tails, Ponytail, Hime cut)
-3.  \`[Color] eyes\` (Use PURE RANDOM colors. e.g., heterochromia, glowing gold, deep blue, purple, red. Do NOT limit to specific sets.)
-
-### B. Random Details (Add Variety)
-Randomly inject 1-2 distinctive features to make the character unique:
-* *Examples:* \`ahoge\`, \`messy braided hair\`, \`hair ribbon\`, \`mole under eye\`, \`hair ornament\`, \`animal ears\`, \`hair over one eye\`, \`sharp teeth\`.
-
-### C. Rich Actions & Emotions (Visual Storytelling)
-Avoid static poses like "standing". Create a **"Frozen Moment"**:
-* *Slice of Life:* Tying hair, eating toast, adjusting glasses, stretching arms, looking at phone, yawning.
-* *Dynamic:* Skirt lifting (wind), jumping, reaching out to viewer, holding a weapon, casting magic.
-* *Emotion:* Don't just say "smile". Use: \`pout\`, \`blush\`, \`tears of joy\`, \`expressionless\`, \`smug\`, \`nervous sweating\`.
+if the user specifies a character, generate the corresponding character's distinctive appearance features.
+If the user does not specify a character, it means generating randomly:
+1.  \`[Color] hair\` (Use PURE RANDOM colors)
+2.  \`[Length/Style] hair\` (Use PURE RANDOM)
+3.  \`[Color] eyes\` (Use PURE RANDOM colors)
 
 ### D. Artist & Style (Anime Focused)
-Choose artists that fit the theme:
-* *Cute/Daily:* \`art by kantoku, art by tianliang duo\` (Vibrant, clear).
-* *Epic/Fantasy:* \`art by wlop, art by ask (askzy), art by nardack\`.
-* *Soft/Emotional:* \`art by makoto shinkai, art by citemer\`.`;
+Choose artists that fit the theme.`;
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -244,8 +237,11 @@ Choose artists that fit the theme:
             const [dragData, setDragData] = useState(null);
             const [dropTarget, setDropTarget] = useState(null);
             
-            const [apiKey, setApiKey] = useState('');
-            const [apiBaseUrl, setApiBaseUrl] = useState('https://api.deepseek.com');
+            // API 配置 (新版多 Provider)
+            const [apiProvider, setApiProvider] = useState('deepseek');
+            const [apiKeys, setApiKeys] = useState({}); // 存储各个 provider 的 key
+            const [currentModel, setCurrentModel] = useState(API_PROVIDERS.deepseek.defaultModel);
+            const [currentBaseUrl, setCurrentBaseUrl] = useState(API_PROVIDERS.deepseek.defaultBaseUrl);
             const [apiError, setApiError] = useState(null);
 
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -312,8 +308,23 @@ Choose artists that fit the theme:
             // ================= 初始化与副作用 =================
 
             useEffect(() => {
-                const savedKey = localStorage.getItem('deepseek_api_key');
-                if (savedKey) setApiKey(savedKey);
+                // 加载 API 设置
+                const savedProvider = localStorage.getItem('sd_api_provider') || 'deepseek';
+                const savedKeys = JSON.parse(localStorage.getItem('sd_api_keys') || '{}');
+                // 兼容旧版 deepseek key
+                const legacyDeepSeekKey = localStorage.getItem('deepseek_api_key');
+                if (legacyDeepSeekKey && !savedKeys.deepseek) {
+                    savedKeys.deepseek = legacyDeepSeekKey;
+                }
+                
+                setApiProvider(savedProvider);
+                setApiKeys(savedKeys);
+                
+                const savedBaseUrl = localStorage.getItem(`sd_api_base_${savedProvider}`);
+                const savedModel = localStorage.getItem(`sd_api_model_${savedProvider}`);
+                
+                setCurrentBaseUrl(savedBaseUrl || API_PROVIDERS[savedProvider]?.defaultBaseUrl || '');
+                setCurrentModel(savedModel || API_PROVIDERS[savedProvider]?.defaultModel || '');
 
                 const savedPresets = localStorage.getItem('sd_gacha_presets');
                 if (savedPresets) {
@@ -329,6 +340,7 @@ Choose artists that fit the theme:
                 if (savedBooks) {
                     try { setGrimoireBooks(JSON.parse(savedBooks)); } catch(e) {}
                 } else {
+                    // Legacy migration logic (omitted for brevity but kept in mind)
                     const savedLegacy = localStorage.getItem('sd_grimoire_lib');
                     if (savedLegacy) {
                         try {
@@ -374,6 +386,38 @@ Choose artists that fit the theme:
                 });
                 setSlots(initialSlots);
             }, []);
+
+            // 监听 Provider 变化更新设置
+            const handleProviderChange = (newProvider) => {
+                setApiProvider(newProvider);
+                localStorage.setItem('sd_api_provider', newProvider);
+                
+                const defaultUrl = API_PROVIDERS[newProvider].defaultBaseUrl;
+                const defaultModel = API_PROVIDERS[newProvider].defaultModel;
+                
+                // 尝试读取该 provider 之前保存的设置，如果没有则用默认
+                const savedUrl = localStorage.getItem(`sd_api_base_${newProvider}`);
+                const savedModel = localStorage.getItem(`sd_api_model_${newProvider}`);
+                
+                setCurrentBaseUrl(savedUrl !== null ? savedUrl : defaultUrl);
+                setCurrentModel(savedModel !== null ? savedModel : defaultModel);
+            };
+
+            const handleApiKeyChange = (value) => {
+                const newKeys = { ...apiKeys, [apiProvider]: value };
+                setApiKeys(newKeys);
+                localStorage.setItem('sd_api_keys', JSON.stringify(newKeys));
+            };
+
+            const handleBaseUrlChange = (value) => {
+                setCurrentBaseUrl(value);
+                localStorage.setItem(`sd_api_base_${apiProvider}`, value);
+            };
+
+            const handleModelChange = (value) => {
+                setCurrentModel(value);
+                localStorage.setItem(`sd_api_model_${apiProvider}`, value);
+            };
 
             useEffect(() => {
                 if (editingTagId && editInputRef.current) {
@@ -430,19 +474,13 @@ Choose artists that fit the theme:
             }, [selectedGrimoireTags]);
 
 
-            // 快捷键优化：ESC 呼出/隐藏侧边栏, Ctrl+Z Grimoire Undo
+            // 快捷键优化 (保持不变)
             useEffect(() => {
                 const handleKeyDown = (e) => {
                     const activeTag = document.activeElement.tagName;
                     const isInputActive = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
 
-                    // 优先级 1: 输入框内的 ESC，只取消焦点
-                    if (isInputActive && e.key === 'Escape') {
-                        e.target.blur();
-                        return;
-                    }
-
-                    // 优先级 2: 模态框关闭
+                    if (isInputActive && e.key === 'Escape') { e.target.blur(); return; }
                     if (e.key === 'Escape') {
                         if (viewingFullSelectedTags) { setViewingFullSelectedTags(false); return; }
                         if (viewingFullExpansion) { setViewingFullExpansion(false); return; }
@@ -452,62 +490,26 @@ Choose artists that fit the theme:
                         if (viewingBook) { setViewingBook(null); return; }
                         if (expandedSlotId) { setExpandedSlotId(null); return; }
                         if (confirmModal.show) { setConfirmModal({ ...confirmModal, show: false }); return; }
-                        
-                        // 优先级 3: 切换侧边栏
-                        e.preventDefault();
-                        setIsSidebarOpen(prev => !prev);
-                        return;
+                        e.preventDefault(); setIsSidebarOpen(prev => !prev); return;
                     }
-
-                    // Undo/Redo (Global but contextual)
                     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
                         if (isInputActive) return;
-
                         e.preventDefault();
                         const isGrimoireContext = activeSidebarTab === 'grimoire' || viewingBook;
-                        
-                        if (isGrimoireContext) {
-                            e.shiftKey ? redoGrimoire() : undoGrimoire();
-                        } else {
-                            e.shiftKey ? redo() : undo();
-                        }
+                        if (isGrimoireContext) { e.shiftKey ? redoGrimoire() : undoGrimoire(); } else { e.shiftKey ? redo() : undo(); }
                         return;
                     }
                     if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
                          if (isInputActive) return;
                          e.preventDefault();
                          const isGrimoireContext = activeSidebarTab === 'grimoire' || viewingBook;
-                         if (isGrimoireContext) {
-                            redoGrimoire();
-                         } else {
-                            redo();
-                         }
+                         if (isGrimoireContext) { redoGrimoire(); } else { redo(); }
                          return;
                     }
-
-                    if (isInputActive) {
-                        if (!e.ctrlKey && !e.metaKey) return; 
-                        if ((e.ctrlKey || e.metaKey) && e.key === 'c') return; 
-                    }
-                    
-                    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'm')) {
-                        e.preventDefault();
-                        setIsSidebarOpen(prev => !prev);
-                    }
-                    
-                    if (e.key === 'Delete' || e.key === 'Backspace') {
-                        if (!isInputActive && selectedTagIds.size > 0) {
-                            e.preventDefault();
-                            deleteSelectedTags();
-                        }
-                    }
-                    
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-                        if (!isInputActive && selectedTagIds.size > 0) {
-                            e.preventDefault();
-                            copySelectedTags();
-                        }
-                    }
+                    if (isInputActive) { if (!e.ctrlKey && !e.metaKey) return; if ((e.ctrlKey || e.metaKey) && e.key === 'c') return; }
+                    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'm')) { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
+                    if (e.key === 'Delete' || e.key === 'Backspace') { if (!isInputActive && selectedTagIds.size > 0) { e.preventDefault(); deleteSelectedTags(); } }
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (!isInputActive && selectedTagIds.size > 0) { e.preventDefault(); copySelectedTags(); } }
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
@@ -572,7 +574,6 @@ Choose artists that fit the theme:
                 }
             }, [historyIndex, history]);
 
-            // 魔导书 Undo/Redo
             const undoGrimoire = useCallback(() => {
                 if (grimoireHistoryIndex > 0) {
                     isGrimoireHistoryAction.current = true;
@@ -599,23 +600,11 @@ Choose artists that fit the theme:
                 setSlots(history[realIndex].slots);
             };
 
-            // Batch Tools
-            const batchLockAll = () => {
-                setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].locked=true); return n; });
-                showToast("已锁定所有模块", "success");
-            };
-            const batchUnlockAll = () => {
-                setSlots(prev => { const n={...prev}; SLOT_CONFIG.forEach(c=>{ if(!c.isFixed) n[c.id].locked=false; }); return n; });
-                showToast("已解锁所有模块", "success");
-            };
-            const batchIncludeAll = () => {
-                setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].included=true); return n; });
-                showToast("已勾选所有模块", "success");
-            };
-            const batchExcludeAll = () => {
-                setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].included=false); return n; });
-                showToast("已取消勾选所有模块", "success");
-            };
+            // Batch Tools (保持不变)
+            const batchLockAll = () => { setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].locked=true); return n; }); showToast("已锁定所有模块", "success"); };
+            const batchUnlockAll = () => { setSlots(prev => { const n={...prev}; SLOT_CONFIG.forEach(c=>{ if(!c.isFixed) n[c.id].locked=false; }); return n; }); showToast("已解锁所有模块", "success"); };
+            const batchIncludeAll = () => { setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].included=true); return n; }); showToast("已勾选所有模块", "success"); };
+            const batchExcludeAll = () => { setSlots(prev => { const n={...prev}; Object.keys(n).forEach(k=>n[k].included=false); return n; }); showToast("已取消勾选所有模块", "success"); };
             const batchClearWeights = () => {
                 setSlots(prev => {
                     const next = { ...prev };
@@ -642,66 +631,152 @@ Choose artists that fit the theme:
                 });
             };
 
-            // API Calls (DeepSeek)
-            const callDeepSeekGenerateRaw = async (theme, mode, currentSystemPrompt) => {
-                const validApiKey = apiKey ? apiKey.trim() : "";
-                if (/[^\x00-\x7F]/.test(validApiKey)) throw new Error("API Key 包含非法字符");
+            // ================== 核心 API 调用逻辑 (Unified LLM Interface) ==================
+            
+            // 通用 API 调用函数
+            const callLLM = async (messages, jsonMode = false) => {
+                const currentKey = apiKeys[apiProvider];
+                if (!currentKey || !currentKey.trim()) throw new Error(`未配置 ${API_PROVIDERS[apiProvider].name} API Key`);
+                if (/[^\x00-\x7F]/.test(currentKey)) throw new Error("API Key 包含非法字符");
+
+                const providerType = API_PROVIDERS[apiProvider].type;
                 
+                if (providerType === 'gemini') {
+                    // Google Gemini REST API (v1beta)
+                    // Construct contents from messages
+                    const contents = messages
+                        .filter(m => m.role !== 'system')
+                        .map(m => ({
+                            role: m.role === 'user' ? 'user' : 'model',
+                            parts: [{ text: m.content }]
+                        }));
+                    
+                    const systemMessage = messages.find(m => m.role === 'system');
+                    const generationConfig = {
+                        temperature: 1.0,
+                    };
+                    if (jsonMode) {
+                        generationConfig.responseMimeType = "application/json";
+                    }
+
+                    const payload = {
+                        contents,
+                        generationConfig
+                    };
+                    
+                    if (systemMessage) {
+                        // Gemini 1.5+ supports systemInstruction. 
+                        // For broader compatibility or older models, usually system prompt is merged, but v1beta supports it.
+                        payload.systemInstruction = { parts: [{ text: systemMessage.content }] };
+                    }
+
+                    // Gemini URL: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={API_KEY}
+                    const url = `${currentBaseUrl}/models/${currentModel}:generateContent?key=${currentKey}`;
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`Gemini API Error: ${response.status} - ${errText}`);
+                    }
+                    
+                    const data = await response.json();
+                    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+                        return data.candidates[0].content.parts[0].text;
+                    } else {
+                        throw new Error("Gemini API 返回了空内容");
+                    }
+
+                } else {
+                    // OpenAI Compatible (DeepSeek, Grok, Custom)
+                    const payload = {
+                        model: currentModel,
+                        messages: messages,
+                        temperature: 1.0,
+                    };
+                    
+                    if (jsonMode) {
+                        payload.response_format = { type: "json_object" };
+                    }
+
+                    // Adjust URL: Remove trailing slash if present
+                    const baseUrl = currentBaseUrl.replace(/\/+$/, '');
+                    const url = `${baseUrl}/chat/completions`;
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${currentKey}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`API Error: ${response.status} - ${errText}`);
+                    }
+
+                    const data = await response.json();
+                    return data.choices[0].message.content.trim();
+                }
+            };
+
+            const callLLMGenerateRaw = async (theme, mode, currentSystemPrompt) => {
                 const randomSeed = Math.random().toString(36).substring(7);
                 const modeInstruction = `Mode: ${mode === 'detailed' ? 'Rich, highly detailed, atmospheric (30+ tags)' : 'Concise, specific core tags (15-20 tags)'}.`;
-                const fullSystemPrompt = `${currentSystemPrompt}\n\n${modeInstruction}`;
                 
                 const userPrompt = theme ? `Theme: ${theme} [Random Seed: ${randomSeed}]` : `Theme: Random creative anime illustration [Random Seed: ${randomSeed}]`;
                 
-                const response = await fetch(`${apiBaseUrl}/chat/completions`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${validApiKey}` },
-                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "system", content: fullSystemPrompt }, { role: "user", content: userPrompt }], temperature: 1.0 }) 
-                });
-                if (!response.ok) throw new Error("API 请求失败");
-                const data = await response.json();
-                return data.choices[0].message.content.trim();
+                const messages = [
+                    { role: "system", content: currentSystemPrompt + "\n\n" + modeInstruction },
+                    { role: "user", content: userPrompt }
+                ];
+
+                return await callLLM(messages, false);
             };
 
-            const callDeepSeekSmartParse = async (rawText) => {
-                const validApiKey = apiKey ? apiKey.trim() : "";
-                if (/[^\x00-\x7F]/.test(validApiKey)) throw new Error("API Key 包含非法字符");
+            const callLLMSmartParse = async (rawText) => {
                 const systemPrompt = `You are a Stable Diffusion prompt parser.\nAnalyze the raw prompt string and categorize tags into these slots:\nquality, artist, character, appearance, clothing, action, items, scene, composition.\nInput: Raw prompt string.\nOutput: Valid JSON object { "slot_name": ["tag1", "tag2"] }.\nSplit mixed tags if necessary. Preserve weights like (tag:1.2).\nReturn ONLY valid JSON.`;
-                const response = await fetch(`${apiBaseUrl}/chat/completions`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${validApiKey}` },
-                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: rawText }], temperature: 0.1, response_format: { type: "json_object" } })
-                });
-                if (!response.ok) throw new Error("API 请求失败");
-                const data = await response.json();
-                return JSON.parse(data.choices[0].message.content);
+                const messages = [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: rawText }
+                ];
+                const jsonStr = await callLLM(messages, true);
+                // Gemini sometimes wraps JSON in markdown code blocks like ```json ... ```
+                const cleanJson = jsonStr.replace(/```json\n?|```/g, "").trim();
+                return JSON.parse(cleanJson);
             };
 
-            const callDeepSeekTranslate = async (slotsToTranslate) => {
-                 const validApiKey = apiKey ? apiKey.trim() : "";
-                 if (/[^\x00-\x7F]/.test(validApiKey)) throw new Error("API Key 包含非法字符");
+            const callLLMTranslate = async (slotsToTranslate) => {
                  let translateFields = {};
                  SLOT_CONFIG.forEach(c => {
                     const slot = slotsToTranslate[c.id];
                     if (slot && slot.tags.length > 0) translateFields[c.id] = slot.tags.map(t => t.en);
                  });
                  if (Object.keys(translateFields).length === 0) return {};
-                 const systemPrompt = "You are a translator. Input is JSON { key: [tags] }. Output JSON { key: [{ en: tag, zh: translation }] }. Maintain all keys.";
-                 const response = await fetch(`${apiBaseUrl}/chat/completions`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${validApiKey}` },
-                    body: JSON.stringify({ model: "deepseek-chat", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify(translateFields) }], temperature: 1.0, response_format: { type: "json_object" } })
-                });
-                if (!response.ok) throw new Error("API 请求失败");
-                const data = await response.json();
-                return JSON.parse(data.choices[0].message.content);
+                 const systemPrompt = "You are a translator. Input is JSON { key: [tags] }. Output JSON { key: [{ en: tag, zh: translation }] }. Maintain all keys. Return valid JSON only.";
+                 const messages = [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: JSON.stringify(translateFields) }
+                 ];
+                 const jsonStr = await callLLM(messages, true);
+                 const cleanJson = jsonStr.replace(/```json\n?|```/g, "").trim();
+                 return JSON.parse(cleanJson);
             };
 
             // Workflows
             const handleSmartPaste = async () => {
-                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请先配置 API Key", "error"); return; }
+                if (!apiKeys[apiProvider]) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请先配置 API Key", "error"); return; }
                 if (!smartPasteContent.trim()) { showToast("请先粘贴提示词", "warning"); return; }
                 setIsSmartParsing(true); setLoadingText("智能解析中..."); 
                 try {
                     const cleanedInput = preprocessPrompts(smartPasteContent);
-                    const result = await callDeepSeekSmartParse(cleanedInput);
+                    const result = await callLLMSmartParse(cleanedInput);
                     let nextSlots = JSON.parse(JSON.stringify(slots)); 
                     let leftoverTags = [];
                     Object.keys(result).forEach(key => {
@@ -719,7 +794,7 @@ Choose artists that fit the theme:
                     setSmartPasteContent(leftoverTags.join(", "));
                     setSlots(nextSlots);
                     setLoadingText("自动翻译中...");
-                    const translatedData = await callDeepSeekTranslate(nextSlots);
+                    const translatedData = await callLLMTranslate(nextSlots);
                     Object.keys(nextSlots).forEach(key => {
                         if (translatedData[key] && Array.isArray(translatedData[key])) {
                             nextSlots[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh }));
@@ -776,20 +851,19 @@ Choose artists that fit the theme:
                 };
                 reader.readAsText(file); e.target.value = null; 
             };
-            const handleSaveSettings = () => { localStorage.setItem('deepseek_api_key', apiKey); if (apiKey) showToast("API Key 已保存", "success"); };
-
+            
             const handleGenerateText = async () => {
-                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                if (!apiKeys[apiProvider]) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
                 setApiError(null); setLoadingText("正在构思..."); setIsRolling(true);
                 try {
-                    const text = await callDeepSeekGenerateRaw(themeInput, generationMode, systemPrompt);
+                    const text = await callLLMGenerateRaw(themeInput, generationMode, systemPrompt);
                     setGeneratedRawText(text); showToast("文本生成成功，请继续下一步", "success");
                 } catch (e) { setApiError(e.message); showToast("生成失败: " + e.message, "error"); } finally { setIsRolling(false); }
             };
 
             // Modified to accept optional text override
             const handleParseAndFill = async (textOverride = null) => {
-                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                if (!apiKeys[apiProvider]) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
                 
                 // Logic update: use expansion if available and not overridden
                 let textToProcess = textOverride;
@@ -815,7 +889,7 @@ Choose artists that fit the theme:
 
                 try {
                     const cleanedInput = preprocessPrompts(textToProcess);
-                    const result = await callDeepSeekSmartParse(cleanedInput);
+                    const result = await callLLMSmartParse(cleanedInput);
                     let nextSlots = JSON.parse(JSON.stringify(slots)); let leftoverTags = [];
                     Object.keys(result).forEach(key => {
                         if (nextSlots[key] && Array.isArray(result[key])) {
@@ -828,7 +902,7 @@ Choose artists that fit the theme:
                         }
                     });
                     setSlots(nextSlots); setLoadingText("正在翻译...");
-                    const translatedData = await callDeepSeekTranslate(nextSlots);
+                    const translatedData = await callLLMTranslate(nextSlots);
                     Object.keys(nextSlots).forEach(key => {
                         if (translatedData[key] && Array.isArray(translatedData[key])) {
                             nextSlots[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh }));
@@ -841,13 +915,13 @@ Choose artists that fit the theme:
             };
 
             const handleOneClickRoll = async () => {
-                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                if (!apiKeys[apiProvider]) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
                 setApiError(null); setLoadingText("AI 创作中..."); setIsRolling(true);
                 try {
-                    const text = await callDeepSeekGenerateRaw(themeInput, generationMode, systemPrompt);
+                    const text = await callLLMGenerateRaw(themeInput, generationMode, systemPrompt);
                     setGeneratedRawText(text); 
                     const cleanedInput = preprocessPrompts(text);
-                    const result = await callDeepSeekSmartParse(cleanedInput);
+                    const result = await callLLMSmartParse(cleanedInput);
                     let nextSlots = JSON.parse(JSON.stringify(slots)); 
                     Object.keys(result).forEach(key => {
                         if (nextSlots[key] && Array.isArray(result[key])) {
@@ -857,7 +931,7 @@ Choose artists that fit the theme:
                             }
                         }
                     });
-                    const translatedData = await callDeepSeekTranslate(nextSlots);
+                    const translatedData = await callLLMTranslate(nextSlots);
                     Object.keys(nextSlots).forEach(key => {
                         if (translatedData[key] && Array.isArray(translatedData[key])) {
                             nextSlots[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh }));
@@ -901,24 +975,16 @@ Choose artists that fit the theme:
             
             // Helper to translate text using LLM
             const handleTranslateExpansion = async () => {
-                if (!apiKey || !grimoireExpansion) return;
+                if (!apiKeys[apiProvider] || !grimoireExpansion) return;
                 setLoadingText("AI 翻译中...");
                 setIsExpandingGrimoire(true); // Reuse loading state
                 try {
                     const systemMsg = "You are a professional translator. Translate the following text into Chinese. Keep the tone accurate and concise. Only output the translated text.";
-                    const response = await fetch(`${apiBaseUrl}/chat/completions`, {
-                        method: 'POST', 
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                        body: JSON.stringify({ 
-                            model: "deepseek-chat", 
-                            messages: [{ role: "system", content: systemMsg }, { role: "user", content: grimoireExpansion }], 
-                            temperature: 0.3 
-                        }) 
-                    });
-                    
-                    if (!response.ok) throw new Error("Translation failed");
-                    const data = await response.json();
-                    const translatedText = data.choices[0].message.content.trim();
+                    const messages = [
+                        { role: "system", content: systemMsg },
+                        { role: "user", content: grimoireExpansion }
+                    ];
+                    const translatedText = await callLLM(messages, false);
                     setGrimoireExpansion(prev => prev + "\n\n--- 翻译 ---\n" + translatedText);
                     showToast("翻译完成", "success");
                 } catch (e) {
@@ -1054,7 +1120,6 @@ Choose artists that fit the theme:
                 }
             };
             
-            // Helper to calculate total scopes count for a book
             const getTotalScopesCount = (book) => {
                 if (!book) return 0;
                 return book.groups.reduce((acc, group) => acc + (group.categories ? group.categories.length : 0), 0);
@@ -1141,13 +1206,13 @@ Choose artists that fit the theme:
             };
 
             const handleExpandGrimoire = async () => {
-                if (!apiKey) { showToast("请配置 API Key", "error"); return; }
+                if (!apiKeys[apiProvider]) { showToast("请配置 API Key", "error"); return; }
                 if (selectedGrimoireTags.size === 0) { showToast("请先选择至少一个 Tag", "warning"); return; }
                 setIsExpandingGrimoire(true);
                 const selectedContent = Array.from(selectedGrimoireTags).join(", ");
                 try {
                     // 使用专用的 Grimoire Prompt
-                    const expandedText = await callDeepSeekGenerateRaw(selectedContent, 'detailed', GRIMOIRE_SYSTEM_PROMPT);
+                    const expandedText = await callLLMGenerateRaw(selectedContent, 'detailed', GRIMOIRE_SYSTEM_PROMPT);
                     setGrimoireExpansion(expandedText);
                     showToast("AI 扩写完成！", "success");
                 } catch (e) {
@@ -1204,12 +1269,12 @@ Choose artists that fit the theme:
 
             const translateAll = async () => {
                 if (isRolling) return;
-                if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
+                if (!apiKeys[apiProvider]) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "error"); return; }
                 let hasTags = false; SLOT_CONFIG.forEach(c => { if (slots[c.id]?.tags.length > 0) hasTags = true; });
                 if (!hasTags) { showToast("没有可翻译的标签", "warning"); return; }
                 setApiError(null); setLoadingText("翻译中..."); setIsRolling(true); actionSource.current = 'ai';
                 try {
-                    const translatedData = await callDeepSeekTranslate(slots);
+                    const translatedData = await callLLMTranslate(slots);
                     setSlots(prev => {
                         const next = JSON.parse(JSON.stringify(prev));
                         Object.keys(next).forEach(key => { if (next[key] && translatedData[key]) next[key].tags = translatedData[key].map(item => ({ id: generateId(), en: item.en, zh: item.zh })); });
@@ -1371,7 +1436,7 @@ Choose artists that fit the theme:
                 showToast(`已复制 ${selectedTagIds.size} 个选中标签`, "success");
             };
             
-            const handleBottomButtonClick = () => { if (!apiKey) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "warning"); return; } handleOneClickRoll(); };
+            const handleBottomButtonClick = () => { if (!apiKeys[apiProvider]) { setIsSidebarOpen(true); setActiveSidebarTab('settings'); showToast("请配置 API Key", "warning"); return; } handleOneClickRoll(); };
 
             // 搜索过滤函数
             const getFilteredGroups = () => {
@@ -1381,14 +1446,12 @@ Choose artists that fit the theme:
                 const lowerQuery = grimoireSearchQuery.toLowerCase();
                 
                 return viewingBook.groups.map(group => {
-                    // Safe access for group.categories just in case
                     if (!group.categories) return null;
 
                     const filteredCategories = group.categories.map(cat => {
                         const catName = typeof cat.name === 'string' ? cat.name.toLowerCase() : '';
                         const catNameMatch = catName.includes(lowerQuery);
                         
-                        // Safe access for cat.tags
                         const tags = Array.isArray(cat.tags) ? cat.tags : [];
 
                         const filteredTags = tags.filter(tag => {
@@ -1488,7 +1551,6 @@ Choose artists that fit the theme:
                                         })}
                                         {selectedGrimoireTags.size === 0 && <p className="text-slate-500 text-sm">暂无选中标签</p>}
                                     </div>
-                                    {/* 手动添加 Tag 区域 (Modal内) */}
                                     <div className="mt-6 pt-4 border-t border-slate-800">
                                         <div className="text-xs text-slate-400 mb-2">手动添加 Tag:</div>
                                         <div className="flex gap-2">
@@ -1575,7 +1637,7 @@ Choose artists that fit the theme:
                         </div>
                     )}
 
-                    {/* ===================== 魔导书单分类聚焦窗口 (Grimoire Category Focus Modal) ===================== */}
+                    {/* ===================== 魔导书单分类聚焦窗口 ===================== */}
                     {expandedGrimoireCategory && (
                         <div className="fixed inset-0 z-[130] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
                             <div className="w-full max-w-4xl h-[80vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -1622,7 +1684,7 @@ Choose artists that fit the theme:
                         </div>
                     )}
 
-                    {/* ===================== 魔导书整组聚焦窗口 (Grimoire Group Focus Modal) ===================== */}
+                    {/* ===================== 魔导书整组聚焦窗口 ===================== */}
                     {expandedGrimoireGroup && (
                         <div className="fixed inset-0 z-[130] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in zoom-in duration-200">
                             <div className="w-full max-w-5xl h-[85vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -1845,7 +1907,7 @@ Choose artists that fit the theme:
                         </div>
                     )}
 
-                    {/* ===================== 全屏魔导书大窗口 (Grimoire Reader Modal) ===================== */}
+                    {/* ===================== 全屏魔导书大窗口 ===================== */}
                     {viewingBook && (
                         <div className="fixed inset-0 z-[80] flex flex-col bg-slate-950 animate-in fade-in slide-in-from-bottom-4 duration-300">
                             {/* Header */}
@@ -1985,8 +2047,8 @@ Choose artists that fit the theme:
                                 )}
                             </div>
 
-                            {/* Footer / Control Bar (Same as before but with added inputs if needed, though they are in sidebar too) */}
-                            <div className="bg-slate-900 border-t border-slate-800 p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.3)]">
+                            {/* Footer / Control Bar */}
+                            <div className="bg-slate-900 border-t border-slate-800 p-4 space-y-3 shadow-[0_-5px_20px_rgba(0,0,0,0.3)]">
                                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-between">
                                     {/* Selected Tags Display */}
                                     <div className="flex-1 w-full md:w-auto">
@@ -2066,11 +2128,18 @@ Choose artists that fit the theme:
                             <button onClick={() => setIsSidebarOpen(false)} className="p-3 text-slate-600 hover:text-white hover:bg-red-500/20 transition-colors" title="关闭侧边栏"><X className="w-5 h-5" /></button>
                         </div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-900 p-4">
-                            {/* ... Sidebar Contents (Kept concise) ... */}
+                            
                             {activeSidebarTab === 'generate' && (
                                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200">
                                     <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                                         <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2"><Sparkles className="w-4 h-4" /> AI 抽卡配置</h3>
+                                        
+                                        {/* 当前使用模型提示 */}
+                                        <div className="mb-3 p-2 bg-slate-900/50 rounded-lg border border-indigo-500/20 text-xs flex items-center justify-between">
+                                            <span className="text-indigo-300 flex items-center gap-1.5"><Bot className="w-3.5 h-3.5" /> {API_PROVIDERS[apiProvider]?.name || apiProvider}</span>
+                                            <span className="text-slate-500">{currentModel}</span>
+                                        </div>
+
                                         <div className="mb-4"><label className="block text-xs text-slate-400 mb-1">主题 (可选)</label><input type="text" value={themeInput} onChange={(e) => setThemeInput(e.target.value)} placeholder="例: 赛博朋克, 森林精灵 (留空随机)" className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-pink-500 focus:outline-none" /></div>
                                         <div className="mb-4"><label className="block text-xs text-slate-400 mb-1">风格模式</label><div className="grid grid-cols-2 gap-2"><button onClick={() => setGenerationMode('simple')} className={`py-2 rounded-lg text-xs font-medium transition-all ${generationMode === 'simple' ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}><Zap className="w-3 h-3 inline mr-1" /> 精略版</button><button onClick={() => setGenerationMode('detailed')} className={`py-2 rounded-lg text-xs font-medium transition-all ${generationMode === 'detailed' ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}><Sparkles className="w-3 h-3 inline mr-1" /> 详细版</button></div></div>
                                         <div className="mb-4">
@@ -2152,7 +2221,7 @@ Choose artists that fit the theme:
                                     {/* Bottom Panel (Fixed/Sticky behavior) */}
                                     <div className="shrink-0 bg-slate-900 border-t border-slate-800 p-4 space-y-3 shadow-[0_-4px_20px_rgba(0,0,0,0.5)] z-10">
                                         
-                                        {/* 1. Selected Tags Display (Improved UI) */}
+                                        {/* 1. Selected Tags Display */}
                                         {selectedGrimoireTags.size > 0 && (
                                             <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
                                                 <div className="flex justify-between items-center mb-1.5">
@@ -2183,7 +2252,7 @@ Choose artists that fit the theme:
                                             </div>
                                         )}
 
-                                        {/* 2. AI Expansion Display (New Requirement) */}
+                                        {/* 2. AI Expansion Display */}
                                         {grimoireExpansion && (
                                             <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
                                                 <div className="flex justify-between items-center mb-1.5">
@@ -2220,7 +2289,6 @@ Choose artists that fit the theme:
                                                 AI 扩写
                                             </button>
                                             
-                                            {/* Send Expansion Button (Conditional Logic Updated) */}
                                             <button 
                                                 onClick={() => handleUseExpansion()} 
                                                 disabled={selectedGrimoireTags.size === 0 && !grimoireExpansion}
@@ -2235,7 +2303,6 @@ Choose artists that fit the theme:
                                             </button>
                                         </div>
 
-                                        {/* 4. Bottom Main Action: Send Selection & Parse (New Requirement) */}
                                         <button 
                                             onClick={() => handleSendSelectionToParse()} 
                                             disabled={selectedGrimoireTags.size === 0 && !grimoireExpansion}
@@ -2263,19 +2330,84 @@ Choose artists that fit the theme:
                                         <div className="text-xs text-indigo-300 font-medium mb-1">Developed by</div>
                                         <div className="text-lg font-bold text-white tracking-wide">逐辰十七</div>
                                     </div>
-                                    <a 
-                                        href="https://github.com/caozhaofeng/AITagGacha" 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-between p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 rounded-xl transition-all group"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <Github className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
-                                            <span className="text-sm font-medium text-slate-300 group-hover:text-white">项目主页 (GitHub)</span>
+                                    
+                                    {/* 新版 API 配置区域 */}
+                                    <div className="space-y-5">
+                                        <div className="border-b border-slate-800 pb-2 mb-2">
+                                            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2"><Server className="w-4 h-4" /> API Provider 配置</h3>
                                         </div>
-                                        <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-slate-400" />
-                                    </a>
-                                    <div className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">DeepSeek API Key</label><div className="relative"><KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" /><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} onBlur={handleSaveSettings} className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all text-slate-200 placeholder:text-slate-600" placeholder="sk-..." /></div></div><div><label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">API Base URL</label><input type="text" value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} onBlur={handleSaveSettings} className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-4 text-sm focus:outline-none focus:border-pink-500 transition-all text-slate-200 placeholder:text-slate-600" placeholder="https://api.deepseek.com" /></div></div>
+                                        
+                                        {/* Provider Select */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">选择服务商</label>
+                                            <select 
+                                                value={apiProvider} 
+                                                onChange={(e) => handleProviderChange(e.target.value)}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-pink-500"
+                                            >
+                                                {Object.values(API_PROVIDERS).map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* API Key Input */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">{API_PROVIDERS[apiProvider].name} API Key</label>
+                                            <div className="relative">
+                                                <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                                                <input 
+                                                    type="password" 
+                                                    value={apiKeys[apiProvider] || ''} 
+                                                    onChange={(e) => handleApiKeyChange(e.target.value)} 
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all text-slate-200 placeholder:text-slate-600" 
+                                                    placeholder={`sk-... (${API_PROVIDERS[apiProvider].name} Key)`} 
+                                                />
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 mt-1">Key 仅保存在本地浏览器中。</p>
+                                        </div>
+
+                                        {/* Advanced Settings Toggle */}
+                                        <div className="pt-2 border-t border-slate-800/50">
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider flex items-center gap-2"><Globe className="w-3.5 h-3.5" /> API Base URL</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={currentBaseUrl} 
+                                                        onChange={(e) => handleBaseUrlChange(e.target.value)} 
+                                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-pink-500 text-slate-200 placeholder:text-slate-600 font-mono" 
+                                                        placeholder="https://api..." 
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider flex items-center gap-2"><Cpu className="w-3.5 h-3.5" /> Model Name</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={currentModel} 
+                                                        onChange={(e) => handleModelChange(e.target.value)} 
+                                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-pink-500 text-slate-200 placeholder:text-slate-600 font-mono" 
+                                                        placeholder="e.g. gpt-4o, gemini-2.0-flash" 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-slate-800">
+                                        <a 
+                                            href="https://github.com/caozhaofeng/AITagGacha" 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="flex items-center justify-between p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 rounded-xl transition-all group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Github className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
+                                                <span className="text-sm font-medium text-slate-300 group-hover:text-white">项目主页 (GitHub)</span>
+                                            </div>
+                                            <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-slate-400" />
+                                        </a>
+                                    </div>
                                 </div>
                             )}
                             {activeSidebarTab === 'presets' && (
@@ -2311,7 +2443,7 @@ Choose artists that fit the theme:
 
                     {/* Main */}
                     <main className="max-w-6xl mx-auto p-4 md:p-6 transition-all" onClick={e => e.stopPropagation()}>
-                        {!apiKey && (<div onClick={() => { setIsSidebarOpen(true); setActiveSidebarTab('settings'); }} className="mb-8 text-center cursor-pointer group"><div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pink-500/10 text-pink-300 text-sm font-medium border border-pink-500/20 group-hover:bg-pink-500/20 group-hover:border-pink-500/40 group-hover:scale-105 transition-all shadow-[0_0_15px_rgba(236,72,153,0.1)]"><Settings2 className="w-4 h-4 animate-bounce" /><span>请点击此处或菜单配置 DeepSeek API Key 以开始使用</span></div></div>)}
+                        {!apiKeys[apiProvider] && (<div onClick={() => { setIsSidebarOpen(true); setActiveSidebarTab('settings'); }} className="mb-8 text-center cursor-pointer group"><div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pink-500/10 text-pink-300 text-sm font-medium border border-pink-500/20 group-hover:bg-pink-500/20 group-hover:border-pink-500/40 group-hover:scale-105 transition-all shadow-[0_0_15px_rgba(236,72,153,0.1)]"><Settings2 className="w-4 h-4 animate-bounce" /><span>请点击此处或菜单配置 API Key 以开始使用</span></div></div>)}
                         {apiError && (<div className="max-w-2xl mx-auto mb-6 bg-red-500/10 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg text-center text-sm flex items-center justify-center gap-2"><AlertTriangle className="w-4 h-4" />{apiError}</div>)}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -2372,7 +2504,7 @@ Choose artists that fit the theme:
                     {/* Bottom Button */}
                     <div className="fixed bottom-6 left-0 right-0 z-30 px-4 pointer-events-none" onClick={e => e.stopPropagation()}>
                         <div className="max-w-md mx-auto pointer-events-auto">
-                            <button onClick={handleBottomButtonClick} disabled={isRolling} className={`w-full group relative overflow-hidden rounded-2xl p-4 transition-all duration-200 shadow-2xl ${isRolling ? "scale-95 opacity-80" : "hover:scale-[1.02] hover:shadow-pink-500/20 cursor-pointer"}`}><div className={`absolute inset-0 animate-gradient-x ${!apiKey ? 'bg-slate-800' : 'bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500'}`}></div><div className="relative flex items-center justify-center gap-3 text-white font-bold text-lg tracking-widest uppercase text-shadow-sm">{isRolling ? <><RefreshCw className="w-5 h-5 animate-spin" /><span>{loadingText}</span></> : <><Sparkles className="w-5 h-5 animate-pulse" /><span>{!apiKey ? "点击设置 API Key" : "一键 AI 抽卡"}</span></>}</div></button>
+                            <button onClick={handleBottomButtonClick} disabled={isRolling} className={`w-full group relative overflow-hidden rounded-2xl p-4 transition-all duration-200 shadow-2xl ${isRolling ? "scale-95 opacity-80" : "hover:scale-[1.02] hover:shadow-pink-500/20 cursor-pointer"}`}><div className={`absolute inset-0 animate-gradient-x ${!apiKeys[apiProvider] ? 'bg-slate-800' : 'bg-gradient-to-r from-violet-600 via-pink-600 to-orange-500'}`}></div><div className="relative flex items-center justify-center gap-3 text-white font-bold text-lg tracking-widest uppercase text-shadow-sm">{isRolling ? <><RefreshCw className="w-5 h-5 animate-spin" /><span>{loadingText}</span></> : <><Sparkles className="w-5 h-5 animate-pulse" /><span>{!apiKeys[apiProvider] ? "点击设置 API Key" : "一键 AI 抽卡"}</span></>}</div></button>
                         </div>
                     </div>
                 </div>
@@ -2382,5 +2514,6 @@ Choose artists that fit the theme:
         const root = createRoot(document.getElementById('root'));
         root.render(<StableDiffusionGacha />);
     </script>
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>
