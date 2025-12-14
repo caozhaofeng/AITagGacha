@@ -69,31 +69,35 @@ AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:�
 
 
 
-API使用
-1. DeepSeek (深度求索)
-API Base URL: https://api.deepseek.com
-常用模型 (Model Names):
-deepseek-chat (默认，对应 DeepSeek-V3，不仅便宜且效果极佳，推荐使用)
-deepseek-reasoner (对应 DeepSeek-R1，推理能力强，但生成 creative writing 可能会有较多思考过程)
 
-2. Grok (xAI)
-API Base URL: https://api.x.ai/v1
-常用模型 (Model Names):
-grok-2-latest (推荐，指向最新的 Grok 2 模型)
-grok-2
-grok-beta
 
-3. Google Gemini
-API Base URL: https://generativelanguage.googleapis.com/v1beta
-常用模型 (Model Names):
-gemini-2.0-flash (推荐，速度快且免费额度较高)
-gemini-1.5-pro
-gemini-1.5-flash
-gemini-2.0-flash-lite-preview
+# API 使用获取
 
-4. Custom (自定义/OpenAI 兼容)
+### 1. DeepSeek (深度求索)
+- **API Base URL:** `https://api.deepseek.com`
+- **常用模型 (Model Names):**
+  - `deepseek-chat`: (默认) 对应 DeepSeek-V3，不仅便宜且效果极佳，**推荐使用**。
+  - `deepseek-reasoner`: 对应 DeepSeek-R1，推理能力强，但生成 creative writing 可能会有较多思考过程。
+
+### 2. Grok (xAI)
+- **API Base URL:** `https://api.x.ai/v1`
+- **常用模型 (Model Names):**
+  - `grok-2-latest`: (**推荐**) 指向最新的 Grok 2 模型。
+  - `grok-2`
+  - `grok-beta`
+
+### 3. Google Gemini
+- **API Base URL:** `https://generativelanguage.googleapis.com/v1beta`
+- **常用模型 (Model Names):**
+  - `gemini-2.0-flash`: (**推荐**) 速度快且免费额度较高。
+  - `gemini-1.5-pro`
+  - `gemini-1.5-flash`
+  - `gemini-2.0-flash-lite-preview`
+
+### 4. Custom (自定义/OpenAI 兼容)
 如果你使用 OneAPI、NewAPI 或其他中转服务：
-API Base URL: 通常填写你的中转地址，例如 https://api.openai.com/v1 或你的私有域名 https://my-oneapi.com/v1。
-常用模型: 取决于你中转支持的模型，例如 gpt-4o, claude-3-5-sonnet-20241022 等。
+- **API Base URL:** 通常填写你的中转地址，例如 `https://api.openai.com/v1` 或你的私有域名 `https://my-oneapi.com/v1`。
+- **常用模型:** 取决于你中转支持的模型，例如 `gpt-4o`, `claude-3-5-sonnet-20241022` 等。
 
-注意：在设置中填写 URL 时，DeepSeek 和 Grok 通常不需要末尾的斜杠，但代码中已经做了兼容处理。Gemini 的 URL 结构比较特殊，代码中是写死的 REST 风格调用，如果你在自定义 (Custom) 中使用 Gemini 模型（通过 OpenAI 兼容层），URL 通常以 /v1 结尾。
+> **注意：** > * 在设置中填写 URL 时，DeepSeek 和 Grok 通常不需要末尾的斜杠，但代码中已经做了兼容处理。
+> * Gemini 的 URL 结构比较特殊，代码中是写死的 REST 风格调用，如果你在自定义 (Custom) 中使用 Gemini 模型（通过 OpenAI 兼容层），URL 通常以 `/v1` 结尾。
