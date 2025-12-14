@@ -69,7 +69,7 @@ AITagGacha是一个创新的AI绘画提示词生成工具，目前的功能有:�
 
 
 
-##API使用
+## API使用
 
 1. DeepSeek (深度求索)
 API Base URL: https://api.deepseek.com
